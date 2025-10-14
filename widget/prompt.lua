@@ -103,7 +103,6 @@ function Prompt:update(msg)
     end
 
     if msg.action == "input" then
-        Log.warn("update: INPUT " .. tostring(msg.value))
         self.content = msg.value
     end
 
@@ -142,7 +141,6 @@ function Prompt:new(config)
 
     return prompt
 end
-
 
 local function prompt(config)
     return Prompt:new(config)
