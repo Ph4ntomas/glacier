@@ -4,7 +4,7 @@ local Log = require("pinnacle.log")
 local Widget = require("snowcap.widget")
 local Operation = require("snowcap.widget.operation")
 
-local widget_signals = require("glacier.widget.signal")
+--local widget_signals = require("glacier.widget.signal")
 
 local per_output = {}
 
@@ -127,16 +127,18 @@ function Bar:focus(focus)
 end
 
 function Bar:update(msg)
+    local focusable = require("glacier.widget.operation").focusable
+
     if msg == nil then
         return
     end
 
-    if msg.type == "focus_widget" then
+    if msg.operation == focusable.FOCUS then
         self:focus(true)
         Log.warn("Focusing: " .. tostring(msg.id))
         self.handle:operate(Operation.focusable.Focus(msg.id))
         return
-    elseif msg.type == "unfocus" then
+    elseif msg.operation == focusable.UNFOCUS then
         self:focus(false)
     end
 
@@ -163,9 +165,11 @@ function Bar:show()
     self.handle = handle
 
     self.handle:on_key_press(function (_, key)
+        local focusable = require("glacier.widget.operation").focusable
         local Keys = require("snowcap.input.keys")
+
         if key == Keys.Escape then
-            self:send_message({ type = "unfocus" })
+            self:send_message(focusable.Unfocus())
         end
     end)
 end
@@ -184,9 +188,14 @@ function Bar:process_children(children)
     ---@diagnostic disable-next-line:redefined-local
     local children = children or {}
     local processed = {}
+    local signals = require("glacier.widget.signal")
+    local oper = require("glacier.widget.operation").focusable
 
-    local redraw_callback = function() self:send_message() end
-    local focus_callback = function(identifier) self:send_message({ type = "focus_widget", id = identifier }) end
+    local callbacks = {
+        [signals.redraw_needed] = function() self:send_message() end,
+        [signals.request_focus] = function(identifier) self:send_message(oper.Focus(identifier)) end,
+        [signals.request_unfocus] = function() self:send_message(oper.Unfocus()) end,
+    }
 
     for _, v in pairs(children) do
         local child = nil
@@ -200,8 +209,9 @@ function Bar:process_children(children)
 
             if child.connect ~= nil then
                 local ok, err = pcall(function()
-                    child:connect(widget_signals.redraw_needed, redraw_callback)
-                    child:connect(widget_signals.request_focus, focus_callback)
+                    for k, cb in pairs(callbacks) do
+                        child:connect(k, cb)
+                    end
                 end)
 
                 if not ok then
