@@ -10,6 +10,7 @@ local _prompt = {}
 ---glacier.widget.prompt module.
 ---
 ---@class glacier.widget.prompt
+---@field mt metatable This module metatable.
 ---@overload fun(...:glacier.widget.prompt.Config):glacier.widget.Prompt
 local prompt = { mt = {} }
 
@@ -27,9 +28,13 @@ _prompt.Action = {
     SUBMIT = "prompt::submit",
 
     ---@type fun(value: string): glacier.widget.prompt.MessageAction
-    Input = function(value) return { action = _prompt.Action.INPUT, value = value } end,
+    Input = function(value)
+        return { action = _prompt.Action.INPUT, value = value }
+    end,
     ---@type fun(): glacier.widget.prompt.MessageAction
-    Submit = function() return { action = _prompt.Action.SUBMIT } end,
+    Submit = function()
+        return { action = _prompt.Action.SUBMIT }
+    end,
 }
 
 ---A simple prompt to run some commands.
@@ -45,7 +50,7 @@ _prompt.Action = {
 ---@field exe_callback fun(command: string) Function to run on submit.
 ---@field private active boolean Whether this prompt is active
 ---@field private prompt string What to display at the start of the prompt
-local Prompt = Base:new { type = "Prompt" }
+local Prompt = Base:new({ type = "Prompt" })
 
 ---Whether the prompt is currently active.
 ---
@@ -63,6 +68,7 @@ function Prompt:view()
         return
     end
 
+    ---@diagnostic disable-next-line:redefined-local
     local prompt = Widget.container({
         height = self.height,
         width = self.width,
@@ -75,13 +81,13 @@ function Prompt:view()
                 on_input = function(value)
                     return { widget_id = self:id(), action = _prompt.Action.Input(value) }
                 end,
-                on_submit = { widget_id = self:id(), action = _prompt.Action.Submit() }
+                on_submit = { widget_id = self:id(), action = _prompt.Action.Submit() },
             },
             padding = self.padding,
             font = self.font,
             icon = self.icon,
             style = self.style,
-        })
+        }),
     })
 
     return prompt
@@ -226,12 +232,13 @@ end
 ---@param config glacier.widget.prompt.Config
 ---@return glacier.widget.Prompt
 function prompt.mt:__call(config)
+    ---@diagnostic disable-next-line redefined-local
     local config = config or {}
 
     if type(config.icon) == "string" then
         local code_point = utf8.codepoint(config.icon --[[@as string]])
         config.icon = {
-            code_point = code_point
+            code_point = code_point,
         }
     end
 
@@ -244,7 +251,7 @@ function prompt.mt:__call(config)
             weight = Widget.font.weight.SEMIBOLD,
         },
         icon = {
-            code_point = utf8.codepoint(''),
+            code_point = utf8.codepoint(""),
             spacing = 4.0,
         },
         style = {
@@ -257,9 +264,11 @@ function prompt.mt:__call(config)
         exe_callback = prompt.spawn,
     }
 
+    ---@diagnostic disable-next-line:redefined-local
     local config = require("glacier.util").merge_table(default_config, config)
 
     return Prompt:new(config)
 end
 
+---@diagnostic disable-next-line: param-type-mismatch
 return setmetatable(prompt, prompt.mt)
