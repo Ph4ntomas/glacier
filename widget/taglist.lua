@@ -7,6 +7,17 @@ local Posix = require("posix")
 local Base = require("glacier.widget.base")
 local widget_signal = require("glacier.widget.signal")
 
+---Internal taglist module
+---@package
+local _taglist = {}
+
+---glacier.widget.taglist module.
+---
+---@class glacier.widget.taglist
+---@field mt metatable This module metatable
+---@overload fun(...:glacier.widget.taglist.Config):glacier.widget.TagList
+local taglist = { mt = {} }
+
 ---`TagList` configuration object.
 ---
 ---@class glacier.widget.taglist.Config
@@ -99,7 +110,7 @@ function Style:new(style)
         active = TagStyle:new(style.active or {}),
         inactive = TagStyle:new(style.inactive or {}),
         padding = style.padding or {},
-        hover_transform = style.hover_transform or TagStyle.brighten(0.05)
+        hover_transform = style.hover_transform or TagStyle.brighten(0.05),
     }
 
     setmetatable(s, self)
@@ -121,8 +132,6 @@ function Style:to_hover(tag_style)
     end
 end
 
-local taglist = {}
-
 ---Action to execute upon an update.
 ---
 ---@class glacier.widget.taglist.MessageAction
@@ -131,22 +140,32 @@ local taglist = {}
 
 ---Type of to execute on an update. These are meant to be used in the TagList:view() function.
 ---@enum glacier.widget.taglist.Action
-taglist.Action = {
+_taglist.Action = {
     TOGGLE = "taglist::toggle_tag",
     SWITCH = "taglist::switch_tag",
     NEXT_TAG = "taglist::next_tag",
     PREV_TAG = "taglist::previous_tag",
     SMALL_SCROLL = "taglist::small_scroll",
     ---@type fun(handle: pinnacle.tag.TagHandle): glacier.widget.taglist.MessageAction
-    Toggle = function(handle) return { action = taglist.Action.TOGGLE, tag = handle } end,
+    Toggle = function(handle)
+        return { action = _taglist.Action.TOGGLE, tag = handle }
+    end,
     ---@type fun(handle: pinnacle.tag.TagHandle): glacier.widget.taglist.MessageAction
-    Switch = function(handle) return { action = taglist.Action.SWITCH, tag = handle } end,
+    Switch = function(handle)
+        return { action = _taglist.Action.SWITCH, tag = handle }
+    end,
     ---@type fun(): glacier.widget.taglist.MessageAction
-    NextTag = function() return { action = taglist.Action.NEXT_TAG } end,
+    NextTag = function()
+        return { action = _taglist.Action.NEXT_TAG }
+    end,
     ---@type fun(): glacier.widget.taglist.MessageAction
-    PrevTag = function() return { action = taglist.Action.PREV_TAG } end,
+    PrevTag = function()
+        return { action = _taglist.Action.PREV_TAG }
+    end,
     ---@type fun(): glacier.widget.taglist.MessageAction
-    SmallScroll = function() return { action = taglist.Action.SMALL_SCROLL } end,
+    SmallScroll = function()
+        return { action = _taglist.Action.SMALL_SCROLL }
+    end,
 }
 
 ---Internal representation of a Tag.
@@ -155,12 +174,12 @@ taglist.Action = {
 ---@field handle pinnacle.tag.TagHandle
 ---@field name string
 ---@field active boolean
-taglist.Tag = {}
+_taglist.Tag = {}
 
 ---Convert a `taglist.Tag` to a string.
 ---
 ---@return string
-function taglist.Tag:__tostring()
+function _taglist.Tag:__tostring()
     return ("<tag#%d#%s active=%q>"):format(self.handle.id, self.name, self.active)
 end
 
@@ -168,7 +187,7 @@ end
 ---
 ---@param tag glacier.widget.taglist.Tag
 ---@return glacier.widget.taglist.Tag
-function taglist.Tag:new(tag)
+function _taglist.Tag:new(tag)
     setmetatable(tag, self)
     self.__index = self
 
@@ -183,7 +202,7 @@ end
 ---@field throttle_scroll number Throttle scroll event.
 ---@field private tags glacier.widget.taglist.Tag[] List of `Tag`s in this list.
 ---@field private prev_scroll number Last time a scroll event happened.
-local TagList = Base:new { type = "TagList" }
+local TagList = Base:new({ type = "TagList" })
 
 ---Generate a `WidgetDef` per tags in this `TagList`.
 ---
@@ -197,15 +216,18 @@ function TagList:view_tags()
 
         local view = Widget.mouse_area({
             callbacks = {
-                on_right_release = { widget_id = self:id(), action = taglist.Action.Toggle(v.handle) },
+                on_right_release = {
+                    widget_id = self:id(),
+                    action = _taglist.Action.Toggle(v.handle),
+                },
             },
             child = Widget.button({
-                on_press = { widget_id = self:id(), action = taglist.Action.Switch(v.handle) },
+                on_press = { widget_id = self:id(), action = _taglist.Action.Switch(v.handle) },
                 style = {
                     active = style:button_style(),
                     pressed = style:button_style(),
                     hovered = hovered_style:button_style(),
-                    disabled = style:button_style()
+                    disabled = style:button_style(),
                 },
                 height = Widget.length.Shrink,
                 padding = self.style.padding,
@@ -214,8 +236,8 @@ function TagList:view_tags()
                     height = Widget.length.Shrink,
                     valign = Widget.alignment.CENTER,
                     style = style:text_style(),
-                })
-            })
+                }),
+            }),
         })
 
         table.insert(list, view)
@@ -230,7 +252,6 @@ end
 ---@return snowcap.widget.WidgetDef|nil
 function TagList:view()
     local children = self:view_tags()
-
     if #children == 0 then
         return
     end
@@ -265,22 +286,22 @@ function TagList:view()
                     value = delta > 0 and 1 or -1
                 end
 
-                local action = taglist.Action.SmallScroll
+                local action = _taglist.Action.SmallScroll
 
                 if value > 0 then
-                    action = taglist.Action.NextTag
+                    action = _taglist.Action.NextTag
                 elseif value < 0 then
-                    action = taglist.Action.PrevTag
+                    action = _taglist.Action.PrevTag
                 end
 
                 return { widget_id = self:id(), action = action() }
-            end
+            end,
         },
         child = Widget.row({
             height = Widget.length.Fill,
             item_alignment = Widget.alignment.CENTER,
-            children = children
-        })
+            children = children,
+        }),
     })
 
     return list
@@ -292,7 +313,7 @@ end
 ---@private
 ---@return integer
 function TagList:find_active_idx()
-    local idx = 0;
+    local idx = 0
 
     for k, tag in pairs(self.tags) do
         if tag.active then
@@ -354,20 +375,20 @@ function TagList:update(msg)
         ---@diagnostic disable-next-line:redefined-local
         local msg = msg.action --[[@as glacier.widget.taglist.MessageAction]]
 
-        if msg.action == taglist.Action.SWITCH then
+        if msg.action == _taglist.Action.SWITCH then
             msg.tag:switch_to()
-        elseif msg.action == taglist.Action.TOGGLE then
+        elseif msg.action == _taglist.Action.TOGGLE then
             msg.tag:toggle_active()
         else
             local sec, nsec = Posix.clock_gettime(0)
-            local now = sec + nsec / 10^9
+            local now = sec + nsec / 10 ^ 9
             local diff = now - self.prev_scroll
 
             if self.throttle_scroll < diff then
                 self.prev_scroll = now
-                if msg.action == taglist.Action.PREV_TAG then
+                if msg.action == _taglist.Action.PREV_TAG then
                     self:focus_prev_tag()
-                elseif msg.action == taglist.Action.NEXT_TAG then
+                elseif msg.action == _taglist.Action.NEXT_TAG then
                     self:focus_next_tag()
                 end
             end
@@ -399,11 +420,14 @@ function TagList:to_tags(handles)
 
     for i, prop in pairs(props) do
         if prop.output.name == self.output.name then
-            table.insert(list, taglist.Tag:new {
-                handle = handles[i],
-                name = prop.name,
-                active = prop.active
-            })
+            table.insert(
+                list,
+                _taglist.Tag:new({
+                    handle = handles[i],
+                    name = prop.name,
+                    active = prop.active,
+                })
+            )
         end
     end
 
@@ -441,7 +465,7 @@ end
 ---
 ---@private
 function TagList:setup_signals()
-    Tag.connect_signal {
+    Tag.connect_signal({
         active = function(handle, active)
             for _, tag in pairs(self.tags) do
                 if tag.handle.id == handle.id then
@@ -450,8 +474,8 @@ function TagList:setup_signals()
                     return
                 end
             end
-        end
-    }
+        end,
+    })
 end
 
 ---Convert the `TagList` to a string.
@@ -472,13 +496,13 @@ function TagList:new(config)
 
     ---@type glacier.widget.TagList
     ---@diagnostic disable-next-line
-    local taglist = Base:new {
+    local taglist = Base:new({
         output = config.output,
         tags = {},
         style = Style:new(config.style),
         throttle_scroll = config.throttle_scroll or 0.05,
-        prev_scroll = 0.0
-    }
+        prev_scroll = 0.0,
+    })
     setmetatable(taglist, self)
     self.__index = self
 
@@ -492,7 +516,8 @@ end
 ---Build a new `TagList` widget.
 ---
 ---@param config glacier.widget.taglist.Config
-return function(config)
+---@return glacier.widget.TagList
+function taglist.mt:__call(config)
     local default_config = {
         output = config.output or Output.get_focused(),
         style = {
@@ -521,7 +546,7 @@ return function(config)
                 left = 8,
                 right = 8,
             },
-            hover_transform = TagStyle.brighten(0.05)
+            hover_transform = TagStyle.brighten(0.05),
         },
         throttle_scroll = config.throttle_scroll or 0.05,
     }
@@ -531,3 +556,6 @@ return function(config)
 
     return TagList:new(config)
 end
+
+---@diagnostic disable-next-line: param-type-mismatch
+return setmetatable(taglist, taglist.mt)
