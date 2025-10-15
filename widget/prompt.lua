@@ -265,7 +265,7 @@ function prompt.mt:__call(config)
     }
 
     ---@diagnostic disable-next-line:redefined-local
-    local config = require("glacier.util").merge_table(default_config, config)
+    local config = require("glacier.utils").merge_table(default_config, config)
 
     return Prompt:new(config)
 end
