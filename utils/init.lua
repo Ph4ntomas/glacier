@@ -1,9 +1,11 @@
-local util = {}
+local utils = {
+    timer = require("glacier.utils.timer"),
+}
 
 ---Merge two table recursively
 ---
 ---WARNING: No effort were done to support cycle.
-function util.merge_table(left, right)
+function utils.merge_table(left, right)
     if left == nil then
         return right
     elseif right == nil then
@@ -18,11 +20,11 @@ function util.merge_table(left, right)
         return right
     else
         for k, v in pairs(right) do
-            left[k] = util.merge_table(left[k], v)
+            left[k] = utils.merge_table(left[k], v)
         end
     end
 
     return left
 end
 
-return util
+return utils
