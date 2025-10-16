@@ -1,7 +1,7 @@
 local Output = require("pinnacle.output")
 
 local state = {
-    outputs = {}
+    outputs = {},
 }
 
 ---@class glacier.Glacier
@@ -9,6 +9,7 @@ local glacier = {
     signal = require("glacier.signal"),
     widget = require("glacier.widget"),
     bar = require("glacier.bar"),
+    utils = require("glacier.utils"),
 }
 
 function glacier.output(output)
