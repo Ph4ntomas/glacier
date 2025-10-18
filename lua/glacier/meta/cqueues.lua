@@ -10,18 +10,20 @@ local cqueues = {}
 ---
 ---@param obj any Object to test
 ---@return string? # Return "controller" if obj is a controller. Return nil otherwise.
+---@diagnostic disable-next-line:unused-local
 function cqueues.type(obj)
     return ""
-end ---@diagnostic disable-line:unused-local
+end
 
 ---Add or interpose a cqueues controller class method
 ---
 ---@param name string
 ---@param f fun(...:any):...
 ---@return (fun(...:any):...)|nil
+---@diagnostic disable-next-line:unused-local
 function cqueues.interpose(name, f)
     return f
-end ---@diagnostic disable-line:unused-local
+end
 
 ---Return the system’s monotonic clock time, usually clock gettime(CLOCK MONOTONIC).
 ---
@@ -51,8 +53,10 @@ function cqueues.running()
         true
 end
 
+---@diagnostic disable-next-line:unused-local
 function cqueues.resume(co) end
 
+---@diagnostic disable-next-line:unused-local
 function cqueues.wrap(f) end
 
 ---Create a new cqueues object.
@@ -68,17 +72,19 @@ local cqueue = {}
 ---
 ---@param co thread # Coroutine to attach.
 ---@return cqueues.cqueue # Returns the controller.
+---@diagnostic disable-next-line:unused-local
 function cqueue:attach(co)
     return self
-end ---@diagnostic disable-line:unused-local
+end
 
 ---Execute function inside a new coroutine managed by the controller.
 ---
 ---@param f fun() Function to execute
 ---@return cqueues.cqueue # Returns the controller.
+---@diagnostic disable-next-line:unused-local
 function cqueue:wrap(f)
     return self
-end ---@diagnostic disable-line:unused-local
+end
 
 ---Step once through the event queue.
 ---
@@ -95,9 +101,10 @@ end ---@diagnostic disable-line:unused-local
 ---@return thread? # Lua thread object.
 ---@return any? # An object that was polled.
 ---@return integer? # Integer file descriptor.
+---@diagnostic disable-next-line:unused-local
 function cqueue:step(timeout)
     return true, nil, nil, nil, nil, nil
-end ---@diagnostic disable-line:unused-local
+end
 
 ---Invoke cqueues:step in a loop, exiting on error, timeout, or if the event queue is empty.
 ---
@@ -108,9 +115,10 @@ end ---@diagnostic disable-line:unused-local
 ---@return thread?
 ---@return table?
 ---@return integer?
+---@diagnostic disable-next-line:unused-local
 function cqueue:loop(timeout)
     return true, nil, nil, nil, nil, nil
-end ---@diagnostic disable-line:unused-local
+end
 
 ---Returns an iterator function over errors returned from cqueue:loop.
 ---
@@ -138,6 +146,7 @@ end
 ---Cancel the specified descriptor for that controller.
 ---
 ---@param fd any Descriptor to cancel.
+---@diagnostic disable-next-line:unused-local
 function cqueue:cancel(fd) end
 
 ---A wrapper around pselect which suspends execution of the process until the controller polls
@@ -145,4 +154,5 @@ function cqueue:cancel(fd) end
 ---
 ---@param signal integer
 ---@param ... integer
+---@diagnostic disable-next-line:unused-local
 function cqueue:pause(signal, ...) end

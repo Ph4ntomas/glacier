@@ -1,3 +1,8 @@
+---@module 'cqueues'
+
+---@type cqueues
+local cqueues = require("cqueues")
+
 ---@class glacier.internal.event_loop
 ---@field loop cqueues.cqueue Glacier's event_loop
 local event_loop = {}
@@ -11,9 +16,7 @@ function mt:__index(property)
         if loop ~= nil then
             return loop
         else
-            --Yoink pinnacle loop if available. This stunt was done by professionals,
-            --don't repeat it at home.
-            local main_loop = require("pinnacle.grpc.client").client.loop
+            local main_loop = cqueues.running()
 
             if main_loop == nil then
                 error("cqueue.loop was accessed before pinnacle initialization.")
