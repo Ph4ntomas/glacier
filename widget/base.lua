@@ -4,7 +4,7 @@ local signal_table = require("glacier.signal.signal_table")
 ---@field private signals glacier.signal.SignalTable
 ---@field private widget_id integer
 local Base = {
-    type = "Base"
+    type = "Base",
 }
 
 local widget_id = 0
@@ -14,6 +14,17 @@ local function next_id()
     widget_id = widget_id + 1
     return id
 end
+
+---Render the widget
+---
+---@return snowcap.widget.WidgetDef?
+function Base:view() end
+
+---Update the widget internal state
+---
+---@param msg any The message to update the widget with.
+---@diagnostic disable-next-line
+function Base:update(msg) end
 
 ---@param name string The name of the signal you're connecting to.
 ---
