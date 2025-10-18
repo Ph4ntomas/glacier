@@ -23,7 +23,7 @@ local clock = { mt = {} }
 ---@field format string Format string to call os.date with.
 ---@field content string String representing the current time.
 ---@field style? snowcap.widget.text.Style Style to apply to the clock's widget.
-local Clock = Base:new({ type = "Clock" })
+local Clock = Base:new_class({ type = "Clock" })
 
 ---Create the view for this clock.
 ---
@@ -50,11 +50,6 @@ function Clock:refresh()
     self:emit(widget_signal.redraw_needed)
 end
 
----Return a string representing this Clock.
-function Clock:__tostring()
-    return ("<%s#%d>"):format(self.type, self:id())
-end
-
 ---Configuration options for `glacier.widget.clock.Clock`.
 ---
 ---@class glacier.widget.clock.Config
@@ -71,16 +66,11 @@ function Clock:new(config)
     local format = config.format or "%a. %d %b. %H:%M"
 
     ---@diagnostic disable-next-line:redefined-local
-    local clock = {
+    local clock = Clock:super({
         format = format,
         content = tostring(os.date(format)),
         style = config.style,
-    }
-
-    Base:new(clock)
-
-    setmetatable(clock, self)
-    self.__index = self
+    })
 
     clock.timer = timer.started({
         interval = config.refresh or 30,

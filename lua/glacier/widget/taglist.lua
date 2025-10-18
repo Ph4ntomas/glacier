@@ -202,7 +202,7 @@ end
 ---@field throttle_scroll number Throttle scroll event.
 ---@field private tags glacier.widget.taglist.Tag[] List of `Tag`s in this list.
 ---@field private prev_scroll number Last time a scroll event happened.
-local TagList = Base:new({ type = "TagList" })
+local TagList = Base:new_class({ type = "TagList" })
 
 ---Generate a `WidgetDef` per tags in this `TagList`.
 ---
@@ -482,7 +482,7 @@ end
 ---
 ---@return string
 function TagList:__tostring()
-    return ("<%s#%n#%s>"):format(self.type, self:id(), self.output.name)
+    return ("<%s#%q#%s>"):format(self.type, self:id(), self.output.name)
 end
 
 ---Create a new `TagList`.
@@ -496,15 +496,13 @@ function TagList:new(config)
 
     ---@type glacier.widget.TagList
     ---@diagnostic disable-next-line
-    local taglist = Base:new({
+    local taglist = TagList:super({
         output = config.output,
         tags = {},
         style = Style:new(config.style),
         throttle_scroll = config.throttle_scroll or 0.05,
         prev_scroll = 0.0,
     })
-    setmetatable(taglist, self)
-    self.__index = self
 
     taglist.tags = taglist:get_all_tags()
 
@@ -518,6 +516,8 @@ end
 ---@param config glacier.widget.taglist.Config
 ---@return glacier.widget.TagList
 function taglist.mt:__call(config)
+    config = config or {}
+
     local default_config = {
         output = config.output or Output.get_focused(),
         style = {

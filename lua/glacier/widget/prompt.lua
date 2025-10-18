@@ -50,7 +50,7 @@ _prompt.Action = {
 ---@field exe_callback fun(command: string) Function to run on submit.
 ---@field private active boolean Whether this prompt is active
 ---@field private prompt string What to display at the start of the prompt
-local Prompt = Base:new({ type = "Prompt" })
+local Prompt = Base:new_class({ type = "Prompt" })
 
 ---Whether the prompt is currently active.
 ---
@@ -164,13 +164,6 @@ function Prompt:update(msg)
     end
 end
 
----Return a string representing this prompt.
----
----@return string
-function Prompt:__tostring()
-    return ("<%s#%d>"):format(self.type, self:id())
-end
-
 ---Configuration options for `glacier.widget.prompt.Prompt`.
 ---
 ---@class glacier.widget.prompt.Config
@@ -194,7 +187,7 @@ function Prompt:new(config)
 
     ---@type glacier.widget.Prompt
     ---@diagnostic disable-next-line:missing-fields,redefined-local
-    local prompt = {
+    local prompt = Prompt:super({
         placeholder = config.placeholder,
         font = config.font,
         icon = config.icon --[[@as snowcap.widget.text_input.Icon]],
@@ -208,12 +201,7 @@ function Prompt:new(config)
         exe_callback = config.exe_callback,
         active = false,
         content = "",
-    }
-
-    Base:new(prompt)
-
-    setmetatable(prompt, self)
-    self.__index = self
+    })
 
     return prompt
 end

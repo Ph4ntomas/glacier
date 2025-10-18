@@ -1,6 +1,11 @@
 local signal_table = require("glacier.signal.signal_table")
 
+---Widget Base class.
+---
+---All of Glacier's widget should inherit from this class. It provides methods for signaling,
+---rendering, updating and printing the widget.
 ---@class glacier.widget.Base
+---@field type string Type of widget.
 ---@field private signals glacier.signal.SignalTable
 ---@field private widget_id integer
 local Base = {
@@ -26,31 +31,32 @@ function Base:view() end
 ---@diagnostic disable-next-line
 function Base:update(msg) end
 
----@param name string The name of the signal you're connecting to.
+---Connect a callback to a specific signal.
 ---
+---@param name string The name of the signal you're connecting to.
 ---@return glacier.signal.SignalHandle
 function Base:connect(name, callback)
     return self.signals:connect(name, callback)
 end
 
+---Emit a signal.
+---
 ---@param name string Signal to emit
 ---@param ... any Parameter to sent to the callbacks
 function Base:emit(name, ...)
     self.signals:emit(name, ...)
 end
 
----@param handle glacier.signal.SignalHandle
+---Disconnect a given callback.
+---
+---@param handle glacier.signal.SignalHandle Handle to the callback to disconnect.
 function Base:disconnect(handle)
     self.signals:disconnect(handle)
 end
 
+---Disconnect all signal handlers.
 function Base:disconnect_all()
     self.signals:disconnect_all()
-end
-
-function Base:drop()
-    self:emit("widget::dropping")
-    self:disconnect_all()
 end
 
 ---Get the widget unique id
@@ -59,18 +65,45 @@ function Base:id()
     return self.widget_id
 end
 
+---Convert the Widget to a printable string.
 function Base:__tostring()
-    return "<" .. self.type .. "#" .. tostring(self.widget_id) .. ">"
+    if self.widget_id == nil then
+        return ("<class#%s>"):format(tostring(self.type))
+    end
+
+    return ("<%s#%d>"):format(tostring(self.type), tostring(self:id()))
 end
 
-function Base:new(o)
+---Create a new widget class.
+---
+---@generic Derived:glacier.widget.Base
+---@param o self
+---@return Derived
+function Base:new_class(o)
+    o = o or {}
+
+    setmetatable(o, self)
+    self.__index = self
+    return o
+end
+
+---Initialize the superclass.
+---
+---This method should be called inside the constructor of a derived class.
+---@protected
+---@generic Derived:self
+---@param o Derived Instance of a derived class under construction.
+---@return Derived
+function Base:super(o)
     o = o or {}
 
     o.widget_id = next_id()
     o.signals = signal_table()
 
     setmetatable(o, self)
+    self.__tostring = self.__tostring -- Why ? No clue, but it won't work otherwise.
     self.__index = self
+
     return o
 end
 
