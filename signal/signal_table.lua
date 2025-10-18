@@ -25,7 +25,7 @@ end
 ---@return string
 function SignalHandle.tostring(handle)
     if handle.entry then
-        return "SignalHandle{" .. handle.entry.signal ..  "#" .. tostring(handle.callback.id) .. "}"
+        return "SignalHandle{" .. handle.entry.signal .. "#" .. tostring(handle.callback.id) .. "}"
     else
         return "SignalHandle{StaleHandle}"
     end
@@ -48,7 +48,7 @@ function SignalEntry.new(signal)
     local entry = {
         id = 0,
         signal = signal,
-        signals = {}
+        signals = {},
     }
 
     setmetatable(entry, { __index = SignalEntry })
@@ -76,15 +76,15 @@ function SignalEntry:add_callback(callback)
     ---@type glacier.signal.SignalCallback
     local signal = {
         id = self:next_id(),
-        callback = callback
+        callback = callback,
     }
 
     table.insert(self.signals, signal)
 
     local handle = setmetatable({
         entry = self,
-        callback = signal
-    }, { __index = SignalHandle, __tostring = SignalHandle.tostring, __mode = 'kv' })
+        callback = signal,
+    }, { __index = SignalHandle, __tostring = SignalHandle.tostring, __mode = "kv" })
 
     return handle
 end
@@ -98,7 +98,7 @@ function SignalEntry:remove_callback(signal_cb)
     for k, callback in pairs(self.signals) do
         if callback == signal_cb then
             idx = k
-            break;
+            break
         end
     end
 
@@ -119,7 +119,7 @@ function SignalEntry:emit(...)
         if ok and ret == true then
             to_remove = callback
         elseif not ok then
-            Log.error("While handling '".. self.signal .. "': " .. ret)
+            Log.error("While handling '" .. self.signal .. "': " .. ret)
         end
     end
 
@@ -194,7 +194,7 @@ function SignalTable:disconnect(handle)
         if entry then
             entry:remove_callback(handle.callback)
         else
-            Log.error(tostring(handle) " wasn't meant for this SignalTable")
+            Log.error(tostring(handle)(" wasn't meant for this SignalTable"))
         end
     end
 end
@@ -212,7 +212,7 @@ end
 ---@return glacier.signal.SignalTable
 local function signal_table()
     return setmetatable({
-        entries = {}
+        entries = {},
     }, { __index = SignalTable })
 end
 

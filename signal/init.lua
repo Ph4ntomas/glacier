@@ -3,7 +3,7 @@ local signal_table = require("glacier.signal.signal_table")()
 
 ---@class glacier.signal
 local Signal = {
-    new_table = require("glacier.signal.signal_table")
+    new_table = require("glacier.signal.signal_table"),
 }
 
 --- Register a new callback for a given signal

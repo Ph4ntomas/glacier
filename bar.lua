@@ -82,7 +82,7 @@ function Bar:view()
                     item_alignment = Widget.alignment.START,
                     spacing = 4,
                     width = Widget.length.Shrink,
-                    children = left_children
+                    children = left_children,
                 }),
                 Widget.row({
                     item_alignment = Widget.alignment.START,
@@ -96,8 +96,8 @@ function Bar:view()
                     width = Widget.length.Shrink,
                     children = right_children,
                 }),
-            }
-        })
+            },
+        }),
     })
 
     return bar
@@ -118,7 +118,8 @@ function Bar:focus(focus)
     local Layer = require("snowcap.layer")
     local client = require("snowcap.grpc.client").client
 
-    local interactivity = focus and Layer.keyboard_interactivity.EXCLUSIVE or Layer.keyboard_interactivity.NONE
+    local interactivity = focus and Layer.keyboard_interactivity.EXCLUSIVE
+        or Layer.keyboard_interactivity.NONE
 
     local _, _ = client:snowcap_layer_v1_LayerService_UpdateLayer({
         layer_id = self.handle.id,
@@ -142,7 +143,6 @@ function Bar:update(msg)
         self:focus(false)
     end
 
-
     self:update_children(self.left, msg)
     self:update_children(self.center, msg)
     self:update_children(self.right, msg)
@@ -164,7 +164,7 @@ function Bar:show()
 
     self.handle = handle
 
-    self.handle:on_key_press(function (_, key)
+    self.handle:on_key_press(function(_, key)
         local focusable = require("glacier.widget.operation").focusable
         local Keys = require("snowcap.input.keys")
 
@@ -192,9 +192,15 @@ function Bar:process_children(children)
     local oper = require("glacier.widget.operation").focusable
 
     local callbacks = {
-        [signals.redraw_needed] = function() self:send_message() end,
-        [signals.request_focus] = function(identifier) self:send_message(oper.Focus(identifier)) end,
-        [signals.request_unfocus] = function() self:send_message(oper.Unfocus()) end,
+        [signals.redraw_needed] = function()
+            self:send_message()
+        end,
+        [signals.request_focus] = function(identifier)
+            self:send_message(oper.Focus(identifier))
+        end,
+        [signals.request_unfocus] = function()
+            self:send_message(oper.Unfocus())
+        end,
     }
 
     for _, v in pairs(children) do
@@ -202,7 +208,9 @@ function Bar:process_children(children)
 
         if type(v) == "function" then
             child = {
-                view = function(_) v() end
+                view = function(_)
+                    v()
+                end,
             }
         elseif type(v) == "table" and type(v.view) == "function" then ---@diagnostic disable-line
             child = v
@@ -232,7 +240,7 @@ end
 ---
 ---@param config glacier.bars.BarConfig
 function Bar:new(config)
-    --- @diagnostic disable-next-line: redefined-local 
+    --- @diagnostic disable-next-line: redefined-local
     local config = config or {}
     config.style = config.style or {}
     local restore_focus = nil
@@ -250,7 +258,8 @@ function Bar:new(config)
         style = {
             height = config.style.height or 40,
             margin_bottom = config.style.margin_bottom or 8,
-            background_color = config.style.background_color or Widget.color.from_rgba(0.15, 0.03, 0.1, 0.65),
+            background_color = config.style.background_color
+                or Widget.color.from_rgba(0.15, 0.03, 0.1, 0.65),
             border = config.style.border or { thickness = 0 },
         },
         output = config.output,
@@ -284,7 +293,7 @@ function Bars.new(config)
 end
 
 function Bars.get(output)
-    --- @diagnostic disable-next-line: redefined-local 
+    --- @diagnostic disable-next-line: redefined-local
     local output = output or Output.get_focused()
 
     return per_output[output.name]
