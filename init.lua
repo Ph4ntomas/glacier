@@ -10,6 +10,7 @@ local glacier = {
     widget = require("glacier.widget"),
     bar = require("glacier.bar"),
     utils = require("glacier.utils"),
+    timer = require("glacier.utils.timer"),
 }
 
 function glacier.output(output)
