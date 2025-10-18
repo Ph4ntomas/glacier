@@ -259,4 +259,4 @@ function prompt.mt:__call(config)
 end
 
 ---@diagnostic disable-next-line: param-type-mismatch
-return setmetatable(prompt, prompt.mt)
+return setmetatable(prompt, prompt.mt) --[[@as glacier.widget.prompt]]

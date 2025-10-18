@@ -1,3 +1,6 @@
+---Glacier utility module
+---
+---@class glacier.utils
 local utils = {
     timer = require("glacier.utils.timer"),
 }

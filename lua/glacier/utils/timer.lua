@@ -232,4 +232,4 @@ end
 timer.Timer = Timer
 
 ---@diagnostic disable-next-line: param-type-mismatch
-return setmetatable(timer, timer.mt)
+return setmetatable(timer, timer.mt) --[[@as glacier.timer]]

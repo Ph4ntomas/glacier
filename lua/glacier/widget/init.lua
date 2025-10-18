@@ -1,3 +1,5 @@
+---Glacier widget module
+---@class glacier.widget
 return {
     signal = require("glacier.widget.signal"),
     prompt = require("glacier.widget.prompt"),

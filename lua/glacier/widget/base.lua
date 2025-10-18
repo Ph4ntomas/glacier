@@ -4,7 +4,7 @@ local signal_table = require("glacier.signal.signal_table")
 ---
 ---All of Glacier's widget should inherit from this class. It provides methods for signaling,
 ---rendering, updating and printing the widget.
----@class glacier.widget.Base
+---@class glacier.widget.Base: glacier.bar.Child
 ---@field type string Type of widget.
 ---@field private signals glacier.signal.SignalTable
 ---@field private widget_id integer
@@ -107,4 +107,4 @@ function Base:super(o)
     return o
 end
 
-return Base
+return Base --[[@as glacier.widget.Base]]

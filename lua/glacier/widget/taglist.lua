@@ -229,11 +229,12 @@ function TagList:view_tags()
                     hovered = hovered_style:button_style(),
                     disabled = style:button_style(),
                 },
-                height = Widget.length.Shrink,
+                height = Widget.length.Fill,
+                valign = Widget.alignment.CENTER,
                 padding = self.style.padding,
                 child = Widget.text({
                     text = v.name,
-                    height = Widget.length.Shrink,
+                    height = Widget.length.Fill,
                     valign = Widget.alignment.CENTER,
                     style = style:text_style(),
                 }),
@@ -558,4 +559,4 @@ function taglist.mt:__call(config)
 end
 
 ---@diagnostic disable-next-line: param-type-mismatch
-return setmetatable(taglist, taglist.mt)
+return setmetatable(taglist, taglist.mt) --[[@as glacier.widget.taglist]]

@@ -90,4 +90,4 @@ end
 clock.Clock = Clock
 
 ---@diagnostic disable-next-line:param-type-mismatch
-return setmetatable(clock, clock.mt)
+return setmetatable(clock, clock.mt) --[[@as glacier.widget.clock]]
