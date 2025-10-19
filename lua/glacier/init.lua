@@ -35,4 +35,4 @@ function glacier.output(output)
     return state.outputs[key]
 end
 
-return glacier
+return glacier --[[@as glacier.Glacier]]
