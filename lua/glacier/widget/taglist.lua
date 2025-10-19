@@ -11,19 +11,23 @@ local widget_signal = require("glacier.widget.signal")
 ---@package
 local _taglist = {}
 
+---Function to call when rendering a single tag.
+---@alias glacier.widget.taglist.InnerViewFn fun(tag_name: string, tag: glacier.widget.taglist.TagStyle):snowcap.widget.WidgetDef
+
+---Function to call when rendering the list itself.
+---
+---@alias glacier.widget.taglist.OuterViewFn fun(children: snowcap.widget.WidgetDef[], tag: glacier.widget.taglist.Style):snowcap.widget.WidgetDef
+
 ---glacier.widget.taglist module.
 ---
 ---@class glacier.widget.taglist
 ---@field mt metatable This module metatable
----@overload fun(...:glacier.widget.taglist.Config):glacier.widget.TagList
-local taglist = { mt = {} }
-
----`TagList` configuration object.
+---@field inner_view glacier.widget.taglist.InnerViewFn Function to override the default rendering of each tags button.
+---@field outer_view glacier.widget.taglist.OuterViewFn Function to override the default rendering of the list of tags.
+---@field TagList glacier.widget.taglist.TagList Widget class.
 ---
----@class glacier.widget.taglist.Config
----@field output pinnacle.output.OutputHandle
----@field style? glacier.widget.taglist.Style
----@field throttle_scroll? number
+---@overload fun(...:glacier.widget.taglist.Config):glacier.widget.taglist.TagList
+local taglist = { mt = {} }
 
 ---Style to apply when building the tags widgets.
 ---
@@ -74,7 +78,7 @@ end
 ---
 ---@param amount number
 ---@return fun(style: glacier.widget.taglist.TagStyle): glacier.widget.taglist.TagStyle
-function TagStyle.brighten(amount)
+function taglist.brighten(amount)
     ---@param self glacier.widget.taglist.TagStyle
     local function transform(self)
         local color = self.background
@@ -96,6 +100,7 @@ end
 ---@field active? glacier.widget.taglist.TagStyle
 ---@field inactive? glacier.widget.taglist.TagStyle
 ---@field padding? snowcap.widget.Padding,
+---@field spacing? number
 ---@field hover_transform? fun(glacier.widget.taglist.TagStyle): glacier.widget.taglist.TagStyle
 local Style = {}
 
@@ -110,7 +115,8 @@ function Style:new(style)
         active = TagStyle:new(style.active or {}),
         inactive = TagStyle:new(style.inactive or {}),
         padding = style.padding or {},
-        hover_transform = style.hover_transform or TagStyle.brighten(0.05),
+        spacing = style.spacing or 0,
+        hover_transform = style.hover_transform,
     }
 
     setmetatable(s, self)
@@ -194,12 +200,43 @@ function _taglist.Tag:new(tag)
     return tag
 end
 
+---Render the content of the tag button.
+---
+---@param tag_name string Name of the tag to display
+---@param style glacier.widget.taglist.TagStyle Styling option for the tag.
+---@return snowcap.widget.WidgetDef
+---@diagnostic disable-next-line: unused-local
+function taglist.default_inner_view(tag_name, style)
+    return Widget.text({
+        text = tag_name,
+        height = Widget.length.Fill,
+        valign = Widget.alignment.CENTER,
+        style = style:text_style(),
+    })
+end
+
+---Render the tag list.
+---
+---@param children snowcap.widget.WidgetDef[]
+---@param style glacier.widget.taglist.Style
+---@return snowcap.widget.WidgetDef
+function taglist.default_outer_view(children, style)
+    return Widget.row({
+        height = Widget.length.Fill,
+        item_alignment = Widget.alignment.CENTER,
+        spacing = style.spacing,
+        children = children,
+    })
+end
+
 ---Widget that display a list of Tags for a given output.
 ---
----@class glacier.widget.TagList: glacier.widget.Base
+---@class glacier.widget.taglist.TagList: glacier.widget.Base
 ---@field output pinnacle.output.OutputHandle Handle to this list `Output`.
 ---@field style? glacier.widget.taglist.Style Style to apply when building the `TagList`.
 ---@field throttle_scroll number Throttle scroll event.
+---@field inner_view glacier.widget.taglist.InnerViewFn Function to override the rendering of the tag button child.
+---@field outer_view glacier.widget.taglist.OuterViewFn Function to override the rendering of the list of tags.
 ---@field private tags glacier.widget.taglist.Tag[] List of `Tag`s in this list.
 ---@field private prev_scroll number Last time a scroll event happened.
 local TagList = Base:new_class({ type = "TagList" })
@@ -232,12 +269,7 @@ function TagList:view_tags()
                 height = Widget.length.Fill,
                 valign = Widget.alignment.CENTER,
                 padding = self.style.padding,
-                child = Widget.text({
-                    text = v.name,
-                    height = Widget.length.Fill,
-                    valign = Widget.alignment.CENTER,
-                    style = style:text_style(),
-                }),
+                child = self.inner_view(v.name, style),
             }),
         })
 
@@ -298,11 +330,7 @@ function TagList:view()
                 return { widget_id = self:id(), action = action() }
             end,
         },
-        child = Widget.row({
-            height = Widget.length.Fill,
-            item_alignment = Widget.alignment.CENTER,
-            children = children,
-        }),
+        child = self.outer_view(children, self.style),
     })
 
     return list
@@ -486,37 +514,20 @@ function TagList:__tostring()
     return ("<%s#%q#%s>"):format(self.type, self:id(), self.output.name)
 end
 
+---`TagList` configuration object.
+---
+---@class glacier.widget.taglist.Config
+---@field output pinnacle.output.OutputHandle
+---@field style? glacier.widget.taglist.Style
+---@field throttle_scroll? number
+---@field inner_view? glacier.widget.taglist.InnerViewFn Function to override the default rendering of each tags.
+---@field outer_view? glacier.widget.taglist.OuterViewFn Function to override the default rendering of the list of tags.
+
 ---Create a new `TagList`.
 ---
 ---@param config glacier.widget.taglist.Config
----@return glacier.widget.TagList
+---@return glacier.widget.taglist.TagList
 function TagList:new(config)
-    ---@diagnostic disable-next-line: redefined-local
-    local config = config or {}
-    config.output = config.output or Output.get_focused()
-
-    ---@type glacier.widget.TagList
-    ---@diagnostic disable-next-line
-    local taglist = TagList:super({
-        output = config.output,
-        tags = {},
-        style = Style:new(config.style),
-        throttle_scroll = config.throttle_scroll or 0.05,
-        prev_scroll = 0.0,
-    })
-
-    taglist.tags = taglist:get_all_tags()
-
-    taglist:setup_signals()
-
-    return taglist
-end
-
----Build a new `TagList` widget.
----
----@param config glacier.widget.taglist.Config
----@return glacier.widget.TagList
-function taglist.mt:__call(config)
     config = config or {}
 
     local default_config = {
@@ -547,16 +558,45 @@ function taglist.mt:__call(config)
                 left = 8,
                 right = 8,
             },
-            hover_transform = TagStyle.brighten(0.05),
+            spacing = 0,
+            hover_transform = nil,
         },
         throttle_scroll = config.throttle_scroll or 0.05,
+        inner_view = taglist.inner_view or taglist.default_inner_view,
+        outer_view = taglist.outer_view or taglist.default_outer_view,
     }
 
     ---@diagnostic disable-next-line:redefined-local
     local config = require("glacier.utils").merge_table(default_config, config)
 
-    return TagList:new(config)
+    ---@type glacier.widget.taglist.TagList
+    ---@diagnostic disable-next-line
+    local ret = TagList:super({
+        output = config.output,
+        tags = {},
+        style = Style:new(config.style),
+        throttle_scroll = config.throttle_scroll,
+        inner_view = config.inner_view,
+        outer_view = config.outer_view,
+        prev_scroll = 0.0,
+    })
+
+    ret.tags = ret:get_all_tags()
+
+    ret:setup_signals()
+
+    return ret
 end
+
+---Build a new `TagList` widget.
+---
+---@param ... glacier.widget.taglist.Config
+---@return glacier.widget.taglist.TagList
+function taglist.mt:__call(...)
+    return TagList:new(...)
+end
+
+taglist.TagList = TagList
 
 ---@diagnostic disable-next-line: param-type-mismatch
 return setmetatable(taglist, taglist.mt) --[[@as glacier.widget.taglist]]
