@@ -82,7 +82,9 @@ local Bar = {}
 ---@field background_color? snowcap.widget.Color Bar background color.
 ---@field border? snowcap.widget.Border Bar's border.
 ---@field spacing? number Spacing between elements.
----@field block_spacing? number Spacing between first/center/last blocks.
+---@field first_spacing? number Spacing between first block.
+---@field center_spacing? number Spacing between center block.
+---@field last_spacing? number Spacing between last block.
 
 ---Render a list of children.
 ---
@@ -114,7 +116,7 @@ function bar.default_first_view(children, style)
     return Widget.row({
         height = Widget.length.Fill,
         item_alignment = Widget.alignment.START,
-        spacing = style.spacing,
+        spacing = style.first_spacing,
         width = Widget.length.Shrink,
         children = children,
     })
@@ -129,7 +131,7 @@ function bar.default_center_view(children, style)
     return Widget.row({
         height = Widget.length.Fill,
         item_alignment = Widget.alignment.START,
-        spacing = style.spacing,
+        spacing = style.center_spacing,
         width = Widget.length.Fill,
         children = children,
     })
@@ -144,7 +146,7 @@ function bar.default_last_view(children, style)
     return Widget.row({
         height = Widget.length.Fill,
         item_alignment = Widget.alignment.END,
-        spacing = style.spacing,
+        spacing = style.last_spacing,
         width = Widget.length.Shrink,
         children = children,
     })
@@ -173,7 +175,7 @@ function Bar:view()
         },
         child = Widget.row({
             item_alignment = Widget.alignment.START,
-            spacing = self.style.block_spacing,
+            spacing = self.style.spacing,
             height = Widget.length.Fixed(self.style.dimension),
             children = {
                 self.first_view(first_children, self.style),
@@ -388,7 +390,9 @@ function Bar:new(config)
             border = config.style.border,
             padding = config.style.padding,
             spacing = config.style.spacing,
-            block_spacing = config.style.block_spacing or config.style.spacing,
+            first_spacing = config.style.first_spacing or config.style.spacing,
+            center_spacing = config.style.center_spacing or config.style.spacing,
+            last_spacing = config.style.last_spacing or config.style.spacing,
         },
         first_view = config.first_view,
         center_view = config.center_view,
