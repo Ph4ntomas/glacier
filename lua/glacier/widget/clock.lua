@@ -4,10 +4,14 @@ local Base = require("glacier.widget.base")
 local widget_signal = require("glacier.widget.signal")
 local timer = require("glacier.utils.timer")
 
+---Function to call to render the clock widget
+---@alias glacier.widget.clock.ViewFn fun(text: string, style: snowcap.widget.text.Style): snowcap.widget.WidgetDef
+
 ---glacier.widget.clock module.
 ---
 ---@class glacier.widget.clock: glacier.widget.Base
 ---@field mt metatable This module metatable.
+---@field view_fn glacier.widget.clock.ViewFn Global override for clocks rendering function.
 ---
 ---@overload fun(...: glacier.widget.clock.Config): glacier.widget.clock.Clock
 local clock = { mt = {} }
@@ -22,25 +26,34 @@ local clock = { mt = {} }
 ---@class glacier.widget.clock.Clock: glacier.widget.Base
 ---@field format string Format string to call os.date with.
 ---@field content string String representing the current time.
----@field style? snowcap.widget.text.Style Style to apply to the clock's widget.
+---@field style snowcap.widget.text.Style Style to apply to the clock's widget.
+---@field view_fn glacier.widget.clock.ViewFn Function to call to render the clock.
 local Clock = Base:new_class({ type = "Clock" })
+
+---Default view fn for clocks.
+---
+---This function create a full-heigh container and vertically centers the text inside of it.
+---@param content string Text to display.
+---@param style snowcap.widget.text.Style Text style assigned to the `glacier.widget.clock.Clock`.
+function clock.default_view(content, style)
+    local widget = Widget.container({
+        height = Widget.length.Fill,
+        width = Widget.length.Shrink,
+        valign = Widget.alignment.CENTER,
+        child = Widget.text({
+            text = content,
+            style = style,
+        }),
+    })
+
+    return widget
+end
 
 ---Create the view for this clock.
 ---
 ---@return snowcap.widget.WidgetDef
 function Clock:view()
-    ---@diagnostic disable-next-line:redefined-local
-    local clock = Widget.container({
-        height = Widget.length.Fill,
-        width = Widget.length.Shrink,
-        valign = Widget.alignment.CENTER,
-        child = Widget.text({
-            text = self.content,
-            style = self.style,
-        }),
-    })
-
-    return clock
+    return self.view_fn(self.content, self.style)
 end
 
 ---Refresh the clock.
@@ -56,6 +69,7 @@ end
 ---@field format? string Format string to call os.date with. Default: "%a. %d %b. %H:%M"
 ---@field refresh? number Amount of time to wait before refreshing the clock (in second). Default: 30
 ---@field style? snowcap.widget.text.Style Style to apply to the clock's text.
+---@field view_fn? glacier.widget.clock.ViewFn Function to call to render the widget.
 
 ---Create a new Clock.
 ---@param config glacier.widget.clock.Config
@@ -66,20 +80,21 @@ function Clock:new(config)
     local format = config.format or "%a. %d %b. %H:%M"
 
     ---@diagnostic disable-next-line:redefined-local
-    local clock = Clock:super({
+    local ret = Clock:super({
         format = format,
         content = tostring(os.date(format)),
         style = config.style,
+        view_fn = config.view_fn or clock.view_fn or clock.default_view,
     })
 
-    clock.timer = timer.started({
+    ret.timer = timer.started({
         interval = config.refresh or 30,
         callback = function()
-            clock:refresh()
+            ret:refresh()
         end,
     })
 
-    return clock
+    return ret
 end
 
 ---Create a `Clock` widget.
