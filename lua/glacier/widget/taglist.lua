@@ -35,8 +35,9 @@ local taglist = { mt = {} }
 ---@field text? snowcap.widget.Color
 ---@field font? snowcap.widget.Font
 ---@field pixels? number
----@field border? snowcap.widget.Border,
----@field background? snowcap.widget.Color,
+---@field border? snowcap.widget.Border
+---@field background? snowcap.widget.Color
+---@field padding? snowcap.widget.Padding
 local TagStyle = {}
 
 ---Create a new `TagStyle`.
@@ -60,17 +61,6 @@ function TagStyle:text_style()
     return {
         font = self.font,
         pixels = self.pixels,
-    }
-end
-
----Create a button `Style` from this `TagStyle`.
----
----@return snowcap.widget.button.Style
-function TagStyle:button_style()
-    return {
-        text_color = self.text,
-        background_color = self.background,
-        border = self.border,
     }
 end
 
@@ -119,6 +109,9 @@ function Style:new(style)
         hover_transform = style.hover_transform,
     }
 
+    s.active.padding = s.active.padding or s.padding
+    s.inactive.padding = s.inactive.padding or s.padding
+
     setmetatable(s, self)
     self.__index = self
 
@@ -152,6 +145,8 @@ _taglist.Action = {
     NEXT_TAG = "taglist::next_tag",
     PREV_TAG = "taglist::previous_tag",
     SMALL_SCROLL = "taglist::small_scroll",
+    ENTER_TAG = "taglist::enter_tag",
+    EXIT_TAG = "taglist::exit_tag",
     ---@type fun(handle: pinnacle.tag.TagHandle): glacier.widget.taglist.MessageAction
     Toggle = function(handle)
         return { action = _taglist.Action.TOGGLE, tag = handle }
@@ -172,6 +167,12 @@ _taglist.Action = {
     SmallScroll = function()
         return { action = _taglist.Action.SMALL_SCROLL }
     end,
+    EnterTag = function(handle)
+        return { action = _taglist.Action.ENTER_TAG, tag = handle }
+    end,
+    ExitTag = function(handle)
+        return { action = _taglist.Action.EXIT_TAG, tag = handle }
+    end,
 }
 
 ---Internal representation of a Tag.
@@ -180,6 +181,7 @@ _taglist.Action = {
 ---@field handle pinnacle.tag.TagHandle
 ---@field name string
 ---@field active boolean
+---@field hovered boolean
 _taglist.Tag = {}
 
 ---Convert a `taglist.Tag` to a string.
@@ -207,11 +209,17 @@ end
 ---@return snowcap.widget.WidgetDef
 ---@diagnostic disable-next-line: unused-local
 function taglist.default_inner_view(tag_name, style)
-    return Widget.text({
-        text = tag_name,
-        height = Widget.length.Fill,
-        valign = Widget.alignment.CENTER,
-        style = style:text_style(),
+    return Widget.container({
+        style = {
+            background_color = style.background,
+        },
+        padding = style.padding,
+        child = Widget.text({
+            text = tag_name,
+            height = Widget.length.Fill,
+            valign = Widget.alignment.CENTER,
+            style = style:text_style(),
+        }),
     })
 end
 
@@ -241,6 +249,49 @@ end
 ---@field private prev_scroll number Last time a scroll event happened.
 local TagList = Base:new_class({ type = "TagList" })
 
+---Transform a scroll event to a message.
+---
+---@param delta snowcap.widget.mouse_area.ScrollDelta
+---@return any
+function TagList:on_scroll(delta)
+    local value = 0
+    if delta.pixels then
+        local dx = delta.pixels.x or 0.0
+        local dy = delta.pixels.y or 0.0
+        local delta = dy ---@diagnostic disable-line:redefined-local
+
+        if math.abs(dx) > math.abs(dy) then
+            delta = dx
+        end
+
+        if math.abs(delta) < 0.50 then
+            value = 0
+        else
+            value = delta > 0 and 1 or -1
+        end
+    elseif delta.lines then
+        local dx = delta.lines.x or 0.0
+        local dy = delta.lines.y or 0.0
+        local delta = dy ---@diagnostic disable-line:redefined-local
+
+        if math.abs(dx) > math.abs(dy) then
+            delta = dx
+        end
+
+        value = delta > 0 and 1 or -1
+    end
+
+    local action = _taglist.Action.SmallScroll
+
+    if value > 0 then
+        action = _taglist.Action.NextTag
+    elseif value < 0 then
+        action = _taglist.Action.PrevTag
+    end
+
+    return { widget_id = self:id(), action = action() }
+end
+
 ---Generate a `WidgetDef` per tags in this `TagList`.
 ---
 ---@return snowcap.widget.WidgetDef[]
@@ -249,7 +300,9 @@ function TagList:view_tags()
 
     for _, v in pairs(self.tags) do
         local style = v.active and self.style.active or self.style.inactive --[[@as glacier.widget.taglist.TagStyle]]
-        local hovered_style = self.style:to_hover(style)
+        if v.hovered then
+            style = self.style:to_hover(style)
+        end
 
         local view = Widget.mouse_area({
             callbacks = {
@@ -257,20 +310,20 @@ function TagList:view_tags()
                     widget_id = self:id(),
                     action = _taglist.Action.Toggle(v.handle),
                 },
-            },
-            child = Widget.button({
-                on_press = { widget_id = self:id(), action = _taglist.Action.Switch(v.handle) },
-                style = {
-                    active = style:button_style(),
-                    pressed = style:button_style(),
-                    hovered = hovered_style:button_style(),
-                    disabled = style:button_style(),
+                on_release = {
+                    widget_id = self:id(),
+                    action = _taglist.Action.Switch(v.handle),
                 },
-                height = Widget.length.Fill,
-                valign = Widget.alignment.CENTER,
-                padding = self.style.padding,
-                child = self.inner_view(v.name, style),
-            }),
+                on_enter = {
+                    widget_id = self:id(),
+                    action = _taglist.Action.EnterTag(v.handle),
+                },
+                on_exit = {
+                    widget_id = self:id(),
+                    action = _taglist.Action.ExitTag(v.handle),
+                },
+            },
+            child = self.inner_view(v.name, style),
         })
 
         table.insert(list, view)
@@ -292,42 +345,7 @@ function TagList:view()
     local list = Widget.mouse_area({
         callbacks = {
             on_scroll = function(delta)
-                local value = 0
-                if delta.pixels then
-                    local dx = delta.pixels.x or 0.0
-                    local dy = delta.pixels.y or 0.0
-                    local delta = dy ---@diagnostic disable-line:redefined-local
-
-                    if math.abs(dx) > math.abs(dy) then
-                        delta = dx
-                    end
-
-                    if math.abs(delta) < 0.5 then
-                        value = 0
-                    else
-                        value = delta > 0 and 1 or -1
-                    end
-                elseif delta.lines then
-                    local dx = delta.lines.x or 0.0
-                    local dy = delta.lines.y or 0.0
-                    local delta = dy ---@diagnostic disable-line:redefined-local
-
-                    if math.abs(dx) > math.abs(dy) then
-                        delta = dx
-                    end
-
-                    value = delta > 0 and 1 or -1
-                end
-
-                local action = _taglist.Action.SmallScroll
-
-                if value > 0 then
-                    action = _taglist.Action.NextTag
-                elseif value < 0 then
-                    action = _taglist.Action.PrevTag
-                end
-
-                return { widget_id = self:id(), action = action() }
+                return self:on_scroll(delta)
             end,
         },
         child = self.outer_view(children, self.style),
@@ -392,6 +410,32 @@ function TagList:focus_prev_tag()
     end
 end
 
+---Find a tag, given its handle.
+---
+---@param handle pinnacle.tag.TagHandle
+---@return glacier.widget.taglist.Tag?
+function TagList:find_by_handle(handle)
+    for k, tag in pairs(self.tags) do
+        if tag.handle.id == handle.id then
+            return tag
+        end
+    end
+
+    return nil
+end
+
+---Set the hover flag of a tag
+---
+---@param handle pinncacle.tag.TagHandle
+---@param hover boolean
+function TagList:set_hover_for(handle, hover)
+    local tag = self:find_by_handle(handle)
+
+    if tag then
+        tag.hovered = hover
+    end
+end
+
 ---Update the TagList internal state and react to messages.
 ---
 ---@param msg any The message to react to.
@@ -408,6 +452,10 @@ function TagList:update(msg)
             msg.tag:switch_to()
         elseif msg.action == _taglist.Action.TOGGLE then
             msg.tag:toggle_active()
+        elseif msg.action == _taglist.Action.ENTER_TAG then
+            self:set_hover_for(msg.tag, true)
+        elseif msg.action == _taglist.Action.EXIT_TAG then
+            self:set_hover_for(msg.tag, false)
         else
             local sec, nsec = Posix.clock_gettime(0)
             local now = sec + nsec / 10 ^ 9
@@ -455,6 +503,7 @@ function TagList:to_tags(handles)
                     handle = handles[i],
                     name = prop.name,
                     active = prop.active,
+                    hovered = false,
                 })
             )
         end
