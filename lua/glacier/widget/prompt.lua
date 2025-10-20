@@ -77,12 +77,10 @@ function Prompt:view()
             value = self.content,
             placeholder = self.placeholder,
             id = tostring(self),
-            callbacks = {
-                on_input = function(value)
-                    return { widget_id = self:id(), action = _prompt.Action.Input(value) }
-                end,
-                on_submit = { widget_id = self:id(), action = _prompt.Action.Submit() },
-            },
+            on_input = function(value)
+                return { widget_id = self:id(), action = _prompt.Action.Input(value) }
+            end,
+            on_submit = { widget_id = self:id(), action = _prompt.Action.Submit() },
             padding = self.padding,
             font = self.font,
             icon = self.icon,

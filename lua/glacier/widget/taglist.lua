@@ -251,7 +251,7 @@ local TagList = Base:new_class({ type = "TagList" })
 
 ---Transform a scroll event to a message.
 ---
----@param delta snowcap.widget.mouse_area.ScrollDelta
+---@param delta snowcap.widget.mouse_area.ScrollEvent
 ---@return any
 function TagList:on_scroll(delta)
     local value = 0
@@ -305,23 +305,21 @@ function TagList:view_tags()
         end
 
         local view = Widget.mouse_area({
-            callbacks = {
-                on_right_release = {
-                    widget_id = self:id(),
-                    action = _taglist.Action.Toggle(v.handle),
-                },
-                on_release = {
-                    widget_id = self:id(),
-                    action = _taglist.Action.Switch(v.handle),
-                },
-                on_enter = {
-                    widget_id = self:id(),
-                    action = _taglist.Action.EnterTag(v.handle),
-                },
-                on_exit = {
-                    widget_id = self:id(),
-                    action = _taglist.Action.ExitTag(v.handle),
-                },
+            on_right_release = {
+                widget_id = self:id(),
+                action = _taglist.Action.Toggle(v.handle),
+            },
+            on_release = {
+                widget_id = self:id(),
+                action = _taglist.Action.Switch(v.handle),
+            },
+            on_enter = {
+                widget_id = self:id(),
+                action = _taglist.Action.EnterTag(v.handle),
+            },
+            on_exit = {
+                widget_id = self:id(),
+                action = _taglist.Action.ExitTag(v.handle),
             },
             child = self.inner_view(v.name, style),
         })
@@ -343,11 +341,9 @@ function TagList:view()
     end
 
     local list = Widget.mouse_area({
-        callbacks = {
-            on_scroll = function(delta)
-                return self:on_scroll(delta)
-            end,
-        },
+        on_scroll = function(delta)
+            return self:on_scroll(delta)
+        end,
         child = self.outer_view(children, self.style),
     })
 
@@ -415,7 +411,7 @@ end
 ---@param handle pinnacle.tag.TagHandle
 ---@return glacier.widget.taglist.Tag?
 function TagList:find_by_handle(handle)
-    for k, tag in pairs(self.tags) do
+    for _, tag in pairs(self.tags) do
         if tag.handle.id == handle.id then
             return tag
         end
@@ -426,7 +422,7 @@ end
 
 ---Set the hover flag of a tag
 ---
----@param handle pinncacle.tag.TagHandle
+---@param handle pinnacle.tag.TagHandle
 ---@param hover boolean
 function TagList:set_hover_for(handle, hover)
     local tag = self:find_by_handle(handle)
