@@ -1,5 +1,7 @@
 local signal_table = require("glacier.signal.signal_table")
 
+local widget_signal = require("glacier.widget.signal")
+
 ---Widget Base class.
 ---
 ---All of Glacier's widget should inherit from this class. It provides methods for signaling,
@@ -30,6 +32,11 @@ function Base:view() end
 ---@param msg any The message to update the widget with.
 ---@diagnostic disable-next-line
 function Base:update(msg) end
+
+---This function will emit `"widget::redraw_needed"`.
+function Base:refresh()
+    self:emit(widget_signal.redraw_needed)
+end
 
 ---Connect a callback to a specific signal.
 ---
