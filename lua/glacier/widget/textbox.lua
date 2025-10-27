@@ -25,7 +25,7 @@ local Base = require("glacier.widget.base")
 ---### Per content Styling
 ---It's possible to set style override based on the content of the textbox. This is useful if the
 ---textbox is expected to only hold simple string known ahead of time. To set per-content styling,
----simply add a `styles` table the object passed on initialization or the `set_style` function.  
+---simply add a `styles` table the object passed on initialization or the `set_style` function.\
 ---At render time, the TextBox will lookup its content in the table, and merge the object with the
 ---default one.
 ---
@@ -45,7 +45,7 @@ local Base = require("glacier.widget.base")
 ---```
 ---
 ---### Advanced styling
----Instead of a static style, or per-content styling, it's also possible to pass a 
+---Instead of a static style, or per-content styling, it's also possible to pass a
 ---`glacier.widget.textbox.StyleFn`. This function will be called with the content of the textbox,
 ---whenever a view need to be generated. This can be used if you need to match part of the string
 ---to apply a specific style.
