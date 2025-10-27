@@ -231,7 +231,6 @@ function Bar:update(msg)
 
     if msg.operation == focusable.FOCUS then
         self:focus(true)
-        Log.warn("Focusing: " .. tostring(msg.id))
         self.handle:operate(Operation.focusable.Focus(msg.id))
         return
     elseif msg.operation == focusable.UNFOCUS then
