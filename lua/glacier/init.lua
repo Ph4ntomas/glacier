@@ -7,13 +7,15 @@ local state = {
 ---Glacier global module.
 ---@class glacier.Glacier
 local glacier = {
-    signal = require("glacier.signal"),
-    widget = require("glacier.widget"),
     bar = require("glacier.bar"),
-    utils = require("glacier.utils"),
-    timer = require("glacier.utils.timer"),
     color = require("glacier.misc.color"),
+    keygrabber = require("glacier.keygrabber"),
+    modal = require("glacier.modal"),
     separators = require("glacier.misc.separators"),
+    signal = require("glacier.signal"),
+    timer = require("glacier.utils.timer"),
+    utils = require("glacier.utils"),
+    widget = require("glacier.widget"),
 }
 
 ---Return per-output storage
