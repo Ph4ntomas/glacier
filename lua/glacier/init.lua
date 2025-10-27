@@ -13,6 +13,7 @@ local glacier = {
     utils = require("glacier.utils"),
     timer = require("glacier.utils.timer"),
     color = require("glacier.misc.color"),
+    separators = require("glacier.misc.separators"),
 }
 
 ---Return per-output storage
