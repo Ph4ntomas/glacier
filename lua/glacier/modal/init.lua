@@ -293,8 +293,12 @@ end
 ---@param text string? Printable character associated with the key pressed.
 local function process_key(_, mods, key, text)
     local Input = require("snowcap.input")
+
     if key == Input.key.BackSpace then
         _modal.sequence:pop()
+    elseif key == Input.key.Escape then
+        _modal.sequence:reset()
+        return
     elseif text then
         _modal.sequence:push(text)
     end
