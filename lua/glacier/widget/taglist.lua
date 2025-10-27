@@ -6,6 +6,7 @@ local Posix = require("posix")
 
 local Base = require("glacier.widget.base")
 local widget_signal = require("glacier.widget.signal")
+local Color = require("glacier.misc.color")
 
 ---Internal taglist module
 ---@package
@@ -32,11 +33,11 @@ local taglist = { mt = {} }
 ---Style to apply when building the tags widgets.
 ---
 ---@class glacier.widget.taglist.TagStyle
----@field text? snowcap.widget.Color
+---@field fg_color? snowcap.widget.Color
+---@field bg_color? snowcap.widget.Color
 ---@field font? snowcap.widget.Font
 ---@field pixels? number
 ---@field border? snowcap.widget.Border
----@field background? snowcap.widget.Color
 ---@field padding? snowcap.widget.Padding
 local TagStyle = {}
 
@@ -57,11 +58,34 @@ end
 ---Create a text `Style` from this `TagStyle`.
 ---
 ---@return snowcap.widget.text.Style
-function TagStyle:text_style()
+function TagStyle:to_text()
     return {
         font = self.font,
+        color = self.fg_color,
         pixels = self.pixels,
     }
+end
+
+---Duplicate `glacier.widget.taglist.TagStyle` fields
+---
+---NOTE: This function only copy the fields, and doesn't setup the metatable on the resulting
+---object.
+---
+---@param style glacier.widget.taglist.TagStyle Source style
+---@return glacier.widget.taglist.TagStyle
+local function copy_style(style)
+    local copy = require("snowcap.util").deep_copy
+
+    local ret = {
+        fg_color = copy(style.fg_color),
+        bg_color = copy(style.bg_color),
+        font = copy(style.font),
+        pixels = style.pixels,
+        border = copy(style.border),
+        padding = copy(style.padding),
+    }
+
+    return ret
 end
 
 ---Create a callback that will brighten the background of a `TagStyle` by a specified amount.
@@ -71,7 +95,7 @@ end
 function taglist.brighten(amount)
     ---@param self glacier.widget.taglist.TagStyle
     local function transform(self)
-        local color = self.background
+        local color = self.bg_color
         if color then
             color.red = color.red + amount
             color.green = color.green + amount
@@ -86,31 +110,43 @@ end
 
 ---Style to apply to every Tag widget in a `TagList`.
 ---
----@class glacier.widget.taglist.Style
+---@class glacier.widget.taglist.Style : glacier.widget.taglist.TagStyle
 ---@field active? glacier.widget.taglist.TagStyle
 ---@field inactive? glacier.widget.taglist.TagStyle
----@field padding? snowcap.widget.Padding,
 ---@field spacing? number
 ---@field hover_transform? fun(glacier.widget.taglist.TagStyle): glacier.widget.taglist.TagStyle
 local Style = {}
 
 ---Create a new `Style`.
 ---
+---@param style? glacier.widget.taglist.Style
 ---@return glacier.widget.taglist.Style
 function Style:new(style)
-    ---@diagnostic disable-next-line:redefined-local
-    local style = style or {}
+    style = style or {}
 
+    ---@type glacier.widget.taglist.TagStyle
+    local active = copy_style(style)
+    active = require("glacier.utils").merge_table(active, style.active or {})
+
+    local inactive = copy_style(style)
+    inactive = require("glacier.utils").merge_table(inactive, style.inactive or {})
+
+    ---@type glacier.widget.taglist.Style
     local s = {
-        active = TagStyle:new(style.active or {}),
-        inactive = TagStyle:new(style.inactive or {}),
-        padding = style.padding or {},
+        -- glacier.widget.taglist.TagStyle fields.
+        fg_color = style.fg_color,
+        bg_color = style.bg_color,
+        font = style.font,
+        pixels = style.pixels,
+        border = style.border,
+        padding = style.padding,
+
+        -- glacier.widget.taglist.Style fields
+        active = TagStyle:new(active),
+        inactive = TagStyle:new(inactive),
         spacing = style.spacing or 0,
         hover_transform = style.hover_transform,
     }
-
-    s.active.padding = s.active.padding or s.padding
-    s.inactive.padding = s.inactive.padding or s.padding
 
     setmetatable(s, self)
     self.__index = self
@@ -211,14 +247,14 @@ end
 function taglist.default_inner_view(tag_name, style)
     return Widget.container({
         style = {
-            background_color = style.background,
+            background_color = style.bg_color,
         },
         padding = style.padding,
         child = Widget.text({
             text = tag_name,
             height = Widget.length.Fill,
             valign = Widget.alignment.CENTER,
-            style = style:text_style(),
+            style = style:to_text(),
         }),
     })
 end
@@ -580,23 +616,17 @@ function TagList:new(config)
         style = {
             ---@type glacier.widget.taglist.TagStyle
             active = {
-                text = Widget.color.from_rgba(0.8, 0.8, 0.8),
-                font = {
-                    family = Widget.font.family.Monospace,
-                    weight = Widget.font.weight.BOLD,
-                },
-                border = { width = 0 },
-                background = Widget.color.from_rgba(0.2, 0.6, 0.1),
+                bg_color = Color.from_hex("#33991A"),
             },
             inactive = {
-                text = Widget.color.from_rgba(0.7, 0.7, 0.7),
-                font = {
-                    family = Widget.font.family.Monospace,
-                    weight = Widget.font.weight.BOLD,
-                },
-                border = { width = 0 },
-                background = Widget.color.from_rgba(0.4, 0.4, 0.4),
+                bg_color = Color.from_hex("#666666"),
             },
+            fg_color = Color.from_hex("#CCCCCC"),
+            font = {
+                family = Widget.font.family.Monospace,
+                weight = Widget.font.weight.BOLD,
+            },
+            border = { width = 0 },
             padding = {
                 top = 2,
                 bottom = 2,
