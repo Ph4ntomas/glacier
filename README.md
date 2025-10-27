@@ -27,7 +27,11 @@ until then.
 - A timer api for easy asynchronous operation
 - Customizable widgets recipe
 - Signals
+- An input grabbing API
+- Modal behavior
+- Other goodies
 
 ## Feature Requests, Bug Reports, Contributions & Questions
-I'm open to Contributions on principle, but I feel it might be a bit too soon for that. In any case,
-I usually roam on Pinnacle's discord/matrix, so ask away.
+Feedback is more than welcome.
+I'm open to contributions, but I feel it might be a bit too soon for that. In any case, I usually
+roam on Pinnacle's discord/matrix, so feel free ask away.
