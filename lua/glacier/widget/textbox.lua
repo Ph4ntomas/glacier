@@ -4,7 +4,7 @@ local Widget = require("snowcap.widget")
 local Base = require("glacier.widget.base")
 
 ---Function to call to render the text widget
----@alias glacier.widget.textbox.ViewFn fun(text: string, glacier.widget.textbox.Style): snowcap.widget.WidgetDef
+---@alias glacier.widget.textbox.ViewFn fun(text: string, style: glacier.widget.textbox.Style): snowcap.widget.WidgetDef
 
 ---Function to retrieve a style based on the TextBox content
 ---
