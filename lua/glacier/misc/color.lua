@@ -87,9 +87,6 @@ function color.from_hex(hex_color, alpha)
         error("Invalid pattern. Expexted '#RRGGBB' or '#RGB', got: " .. hex_color)
     end
 
-    require("pinnacle.log").error("Color: ", hex_color)
-    require("pinnacle.log").error("matches: ", table.unpack(matches))
-
     for _, match in ipairs(matches) do
         table.insert(ret, tonumber(match, 16) / 255.0)
     end
@@ -103,7 +100,6 @@ function color.from_hex(hex_color, alpha)
 
     table.insert(ret, alpha)
 
-    require("pinnacle.log").error("parsed color: ", table.unpack(ret))
     return Widget.color.from_rgba(table.unpack(ret))
 end
 
