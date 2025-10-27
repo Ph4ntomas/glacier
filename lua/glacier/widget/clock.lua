@@ -42,6 +42,8 @@ function clock.default_view(content, style)
         valign = Widget.alignment.CENTER,
         child = Widget.text({
             text = content,
+            height = Widget.length.Fill,
+            valign = Widget.alignment.CENTER,
             style = style,
         }),
     })
