@@ -262,11 +262,11 @@ function Bar:show()
 
     self.handle = handle
 
-    self.handle:on_key_press(function(_, key)
+    self.handle:on_key_event(function(_, event)
         local focusable = require("glacier.widget.operation").focusable
         local Keys = require("snowcap.input.keys")
 
-        if key == Keys.Escape then
+        if event.pressed and event.key == Keys.Escape then
             self:send_message(focusable.Unfocus())
         end
     end)
