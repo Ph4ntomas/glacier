@@ -104,11 +104,6 @@ function Prompt:activate()
     self:focus()
 end
 
----Make this prompt emit a signal to inform the Layer to re-render.
-function Prompt:refresh()
-    self:emit(widget_signal.redraw_needed)
-end
-
 ---Focus this prompt.
 function Prompt:focus()
     self:emit(widget_signal.request_focus, tostring(self))
@@ -126,7 +121,7 @@ function Prompt:deactivate()
     self:reset()
     self.active = false
 
-    self:emit(widget_signal.redraw_needed)
+    self:refresh()
 end
 
 ---Reset the prompt content.
@@ -180,46 +175,7 @@ end
 ---@param config glacier.widget.prompt.Config
 ---@return glacier.widget.Prompt
 function Prompt:new(config)
-    ---@diagnostic disable-next-line: redefined-local
-    local config = config or {}
-
-    ---@type glacier.widget.Prompt
-    ---@diagnostic disable-next-line:missing-fields,redefined-local
-    local prompt = Prompt:super({
-        placeholder = config.placeholder,
-        font = config.font,
-        icon = config.icon --[[@as snowcap.widget.text_input.Icon]],
-        padding = config.padding,
-        height = config.height,
-        width = config.width,
-        style = {
-            active = config.style,
-            focused = config.style_focus or config.style,
-        },
-        exe_callback = config.exe_callback,
-        active = false,
-        content = "",
-    })
-
-    return prompt
-end
-
----Default prompt execution callback.
----
----@param command string
-function prompt.spawn(command)
-    if command and command ~= "" then
-        Process.spawn(command)
-    end
-end
-
---- Create a prompt widget which will launch a command when submitted.
----
----@param config glacier.widget.prompt.Config
----@return glacier.widget.Prompt
-function prompt.mt:__call(config)
-    ---@diagnostic disable-next-line redefined-local
-    local config = config or {}
+    config = config or {}
 
     if type(config.icon) == "string" then
         local code_point = utf8.codepoint(config.icon --[[@as string]])
@@ -251,9 +207,45 @@ function prompt.mt:__call(config)
     }
 
     ---@diagnostic disable-next-line:redefined-local
-    local config = require("glacier.utils").merge_table(default_config, config)
+    config = require("glacier.utils").merge_table(default_config, config)
 
-    return Prompt:new(config)
+    ---@type glacier.widget.Prompt
+    ---@diagnostic disable-next-line:missing-fields,redefined-local
+    local prompt = Prompt:super({
+        placeholder = config.placeholder,
+        font = config.font,
+        icon = config.icon --[[@as snowcap.widget.text_input.Icon]],
+        padding = config.padding,
+        height = config.height,
+        width = config.width,
+        style = {
+            active = config.style,
+            focused = config.style_focus or config.style,
+            disabled = config.style, -- Sometime, we lose the focus/active state for a few frame.
+        },
+        exe_callback = config.exe_callback,
+        active = false,
+        content = "",
+    })
+
+    return prompt
+end
+
+---Default prompt execution callback.
+---
+---@param command string
+function prompt.spawn(command)
+    if command and command ~= "" then
+        Process.spawn(command)
+    end
+end
+
+--- Create a prompt widget which will launch a command when submitted.
+---
+---@param ... glacier.widget.prompt.Config
+---@return glacier.widget.Prompt
+function prompt.mt:__call(...)
+    return Prompt:new(...)
 end
 
 ---@diagnostic disable-next-line: param-type-mismatch
