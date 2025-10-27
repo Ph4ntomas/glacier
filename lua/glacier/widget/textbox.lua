@@ -4,13 +4,62 @@ local Widget = require("snowcap.widget")
 local Base = require("glacier.widget.base")
 
 ---Function to call to render the text widget
----@alias glacier.widget.textbox.ViewFn fun(text: string, style: glacier.widget.textbox.Style): snowcap.widget.WidgetDef
+---@alias glacier.widget.textbox.ViewFn fun(text: string, style: glacier.widget.textbox.Style?): snowcap.widget.WidgetDef
 
 ---Function to retrieve a style based on the TextBox content
----
----@alias glacier.widget.textbox.StyleFn fun(text: string): glacier.widget.textbox.Style?
+---@alias glacier.widget.textbox.StyleFn fun(text: string): glacier.widget.textbox.Style
 
 ---glacier.widget.textbox module.
+---
+---This module introduces a simple widget to display text. The TextBox object can be used in other
+---Glacier layers (e.g. the bar), and will properly notify the underlying layer when its content
+---is updated.
+---
+---## Styling
+---### Basic style
+---Styling can be applied globally, by passing a `glacier.widget.textbox.Style` object on creation,
+---or by calling the `TextBox.set_style` function.
+---
+---The style is then passed to the view function when it need to be rendered.
+---
+---### Per content Styling
+---It's possible to set style override based on the content of the textbox. This is useful if the
+---textbox is expected to only hold simple string known ahead of time. To set per-content styling,
+---simply add a `styles` table the object passed on initialization or the `set_style` function.  
+---At render time, the TextBox will lookup its content in the table, and merge the object with the
+---default one.
+---
+---```lua
+---glacier.widget.textbox({
+---    ...
+---    style = {
+---        [...] -- default option
+---        bg_color = Widget.color.from_rgba(0, 1.0, 0) -- By default, the background is green.
+---        styles = {
+---            foo = {
+---                 bg_color = Widget.color.from_rgba(1.0, 0, 0) -- when the text is exactly 'foo', this color will be used instead.
+---            }
+---        }
+---    }
+---})
+---```
+---
+---### Advanced styling
+---Instead of a static style, or per-content styling, it's also possible to pass a 
+---`glacier.widget.textbox.StyleFn`. This function will be called with the content of the textbox,
+---whenever a view need to be generated. This can be used if you need to match part of the string
+---to apply a specific style.
+---
+---## Changing the view
+---As with most widgets, it's possible to override the way the view is rendered.
+---
+---### Global override
+---Upon creation, TextBox will loopup the `glacier.widget.textbox.view_fn` field. If set, it will
+---be used instead of `glacier.widget.textbox.default_view.
+---
+---### Per widget override
+---It's also possible to set the view_fn of a single widget, either at creation time, or by calling
+---`TextBox:set_view_fn`.
 ---
 ---@class glacier.widget.textbox
 ---@field mt metatable This module metatable.
@@ -27,11 +76,55 @@ local textbox = { mt = {} }
 ---@field border? snowcap.widget.Border Border option for the container around the text.
 ---@field pixels? number Size of the text, in pixel.
 ---@field font? snowcap.widget.Font Text font.
+---@field padding? snowcap.widget.Padding Container Padding.
+local Style = {}
+
+---Create a new instance of `glacier.widget.textbox.Style`
+---
+---@param style glacier.widget.textbox.Style
+---@return glacier.widget.textbox.Style
+function Style:new(style)
+    style = style or {}
+
+    setmetatable(style, self)
+    self.__index = self
+    self.__tostring = self.__tostring
+
+    return style
+end
+
+---Convert this Style object into a string.
+---@return string
+function Style:__tostring()
+    return "<textbox.Style>"
+end
+
+---Convert the style object into a `snowcap.widget.text.Style`
+---@return snowcap.widget.text.Style
+function Style:to_text()
+    ---@type snowcap.widget.text.Style
+    return {
+        color = self.fg_color,
+        pixels = self.pixels,
+        font = self.font,
+    }
+end
+
+---Convert the style object into a `snowcap.widget.container.Style`
+---@return snowcap.widget.container.Style
+function Style:to_container()
+    ---@type snowcap.widget.container.Style
+    return {
+        text_color = self.fg_color,
+        background_color = self.bg_color,
+        border = self.border,
+    }
+end
 
 ---Collection of styles.
 ---
 ---@class glacier.widget.textbox.Styles: glacier.widget.textbox.Style
----@field styles? table<string, glacier.widget.textbox.Style> Per content styling.
+---@field styles? table<string, glacier.widget.textbox.Style> Per content override.
 
 ---@package
 ---Wrap a `glacier.widget.textbox.Styles` in a `glacier.widget.textbox.StyleFn`
@@ -40,52 +133,24 @@ local textbox = { mt = {} }
 ---@return glacier.widget.textbox.StyleFn
 local function _style_lookup(style)
     return function(content)
+        local deep_copy = require("snowcap.util").deep_copy
+        ---@type glacier.widget.textbox.Style
+        local ret = {
+            fg_color = deep_copy(style.fg_color),
+            bg_color = deep_copy(style.bg_color),
+            border = deep_copy(style.border),
+            pixels = deep_copy(style.pixels),
+            font = deep_copy(style.font),
+            padding = deep_copy(style.padding),
+        }
+
         if style.styles and style.styles[content] then
-            return style[content]
-        else
-            return style
+            ret = require("glacier.utils").merge_table(ret, style.styles[content])
         end
+
+        return ret
     end
 end
-
----Utility functions for `glacier.widget.textbox.Style`.
----
----@class glacier.widget.textbox.style
-local _style = {}
-
----Convert a `glacier.widget.textbox.Style` to a `snowcap.widget.container.Style`.
----
----@param style? glacier.widget.textbox.Style
----@return snowcap.widget.container.Style?
-function _style.to_container(style)
-    if not style then
-        return nil
-    end
-
-    return {
-        text_color = style.fg_color,
-        background_color = style.bg_color,
-        border = style.border,
-    }
-end
-
----Convert a `glacier.widget.textbox.Style` to a `snowcap.widget.text.Style`.
----
----@param style? glacier.widget.textbox.Style
----@return snowcap.widget.text.Style?
-function _style.to_text(style)
-    if not style then
-        return nil
-    end
-
-    return {
-        color = style.fg_color,
-        pixels = style.pixels,
-        font = style.font,
-    }
-end
-
-textbox.style = _style
 
 ---Simple widget to display text.
 ---
@@ -99,17 +164,20 @@ local TextBox = Base:new_class({ type = "TextBox" })
 ---Default view_fn for textbox
 ---
 ---@param content string
----@param style? glacier.widget.textbox.Style
+---@param style glacier.widget.textbox.Style
 ---@return snowcap.widget.WidgetDef
 function textbox.default_view(content, style)
     local widget = Widget.container({
         height = Widget.length.Fill,
         width = Widget.length.Shrink,
         valign = Widget.alignment.CENTER,
-        style = textbox.style.to_container(style),
+        padding = style.padding,
+        style = style:to_container(),
         child = Widget.text({
             text = content,
-            style = textbox.style.to_text(style),
+            height = Widget.length.Fill,
+            valign = Widget.alignment.CENTER,
+            style = style:to_text(),
         }),
     })
 
@@ -120,7 +188,9 @@ end
 ---
 ---@return snowcap.widget.WidgetDef
 function TextBox:view()
-    return self.view_fn(self.content, self.style_fn(self.content))
+    local style = self.style_fn(self.content) or {}
+
+    return self.view_fn(self.content, Style:new(style))
 end
 
 ---Override the view function used to render this TextBox.
@@ -161,7 +231,7 @@ function TextBox:set_style(style)
         self.style_fn = _style_lookup(style)
     elseif not style then
         self.style_fn = function(_)
-            return nil
+            return {}
         end
     else
         Log.error("Unexpected Style type. Got " .. type(style))
@@ -204,7 +274,7 @@ function TextBox:new(config)
     end
 
     style_fn = style_fn or function(_)
-        return nil
+        return {}
     end
 
     local ret = TextBox:super({
