@@ -1,0 +1,10 @@
+[package]
+name = "glacier"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pinnacle-api = { git = "http://github.com/Ph4ntomas/pinnacle", branch = "next", default-features = false }
+snowcap-api = { git = "http://github.com/Ph4ntomas/pinnacle", branch = "next", default-features = false }
+regex = "1.12.2"
+glacier-derive = { path = "../glacier-derive" }
