@@ -1,3 +1,4 @@
+local Log = require("snowcap.log")
 local Layer = require("snowcap.layer")
 local Widget = require("snowcap.widget")
 
@@ -70,7 +71,7 @@ function KeyGrabber:update(_) end
 ---If the KeyGrabber is already running, does nothing. Otherwise, a new layer is created with
 ---exclusive keyboard interactivity, then the `on_start` callback is called.
 function KeyGrabber:start()
-    if self.handle then
+    if self:running() then
         return
     end
 
@@ -82,7 +83,7 @@ function KeyGrabber:start()
     })
 
     if not handle then
-        require("snowcap.log").error("Could not get a layer handle")
+        Log.error("Could not get a layer handle")
 
         return
     end
@@ -116,7 +117,7 @@ end
 ---
 ---Otherwise, call the `on_stop` callback if present, and close the Layer used to grab inputs.
 function KeyGrabber:stop()
-    if self.handle then
+    if self:running() then
         if self.on_stop then
             self.on_stop(self)
         end
@@ -124,6 +125,74 @@ function KeyGrabber:stop()
         self.handle:close()
         self.handle = nil
     end
+end
+
+---Update the KeyGrabber keyboard interactivity.
+---
+---@param interactivity snowcap.layer.KeyboardInteractivity
+---@return boolean
+function KeyGrabber:update_interactivity(interactivity)
+    if not self:running() then
+        Log.warn("KeyGrabber:update_interactivity called on a stopped layer.")
+        return false
+    end
+
+    local client = require("snowcap.grpc.client").client
+
+    local ok, err = client:snowcap_layer_v1_LayerService_UpdateLayer({
+        layer_id = self.handle.id,
+        keyboard_interactivity = interactivity,
+    })
+
+    if not ok then
+        Log.error("Could not set layer interactivity: " .. tostring(err))
+    end
+
+    return ok ~= nil
+end
+
+---Pause this layer.
+---
+---Pausing a layer make it so it's not grabbing input anymore. However this state is different from
+---stopping the KeyGrabber altogether, since pausing the layer will not emit a `stop` signal, nor
+---change the `running` state.
+---
+---Calling this function while the KeyGrabber is not running will do nothing.
+function KeyGrabber:pause()
+    if self:running() then
+        self:update_interactivity(Layer.keyboard_interactivity.NONE)
+    end
+end
+
+---Unpause a paused layer.
+---
+---See `KeyGrabber:pause()`.
+---
+---Unpausing a stopped KeyGrabber does nothing.
+function KeyGrabber:unpause()
+    if self:running() then
+        self:update_interactivity(Layer.keyboard_interactivity.EXCLUSIVE)
+    end
+end
+
+---Whether this KeyGrabber is running.
+---
+---@return boolean
+function KeyGrabber:running()
+    return self.handle ~= nil
+end
+
+---Pause this KeyGrabber to run some callback, then un-pause it.
+---
+---If the KeyGrabber is stop by the callback, it won't be restarted afterward.
+function KeyGrabber:run_paused(callback, ...)
+    self:pause()
+
+    local ret = callback(...)
+
+    self:unpause()
+
+    return ret
 end
 
 ---@class glacier.keygrabber.Config

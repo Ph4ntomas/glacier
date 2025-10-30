@@ -264,13 +264,15 @@ local _modal = {
 ---@param modifiers snowcap.input.Modifiers Current set of modifiers.
 ---@param mode glacier.modal.Mode Active mode.
 local function eval_sequence(sequence, modifiers, mode)
+    assert(mode, "Fatal error: expected Mode, got nil")
+
     local done = true
 
     for _, command in ipairs(mode) do
         local valid, finished, captures = command:match(sequence, modifiers)
 
         if finished then
-            command:handler(table.unpack(captures))
+            command:run(table.unpack(captures))
             return true
         elseif valid then
             done = false
@@ -292,6 +294,13 @@ end
 ---@param key snowcap.Key The key that was pressed.
 ---@param text string? Printable character associated with the key pressed.
 local function process_key(_, mods, key, text)
+    -- When we're stopping, the additional inputs might be flushed toward this function.
+    local active_mode = _modal.active_mode:get()
+
+    if active_mode == _modal.stop_mode then
+        return
+    end
+
     local Input = require("snowcap.input")
 
     if key == Input.key.BackSpace then
@@ -301,6 +310,13 @@ local function process_key(_, mods, key, text)
         return
     elseif text then
         _modal.sequence:push(text)
+    end
+
+    local mode = _modal.modes[active_mode]
+
+    if not mode then
+        Log.error("Unknown mode: " .. active_mode)
+        return
     end
 
     if eval_sequence(_modal.sequence:get(), mods, _modal.modes[_modal.active_mode:get()]) then
@@ -352,6 +368,7 @@ end
 ---@class glacier.modal.Command
 ---@field pattern string[] Pattern to match.
 ---@field handler fun(cmd: glacier.modal.Command, ...) Command's handler.
+---@field keep_grab boolean Unless true, input grabbing is paused while the handler is running.
 local Command = {}
 
 ---Create a new Command.
@@ -425,14 +442,29 @@ end
 
 ---Execute the Command handler.
 ---
+---Unless `keep_grab` is true, the KeyGrabber will be paused while the command is running. This is
+---done so the API works properly when working with `focus`. If keep_grab is true, function
+---querying focused window or output might fail due to the focus being on the invisible layer.
+---
+---You should not rely on the KeyGrabber being paused if you want to stop it temporarily and do so
+---explicitly by calling stop/start functions.
+---
 ---@param ... string String captured from the pattern.
 function Command:run(...)
+    if not self.keep_grab then
+        self:grabber():pause()
+    end
+
     local ok, err = pcall(function(...)
         self:handler(...)
     end, ...)
 
     if not ok then
-        Log.error("Error while calling command handler: ", err)
+        Log.error("Error while calling command handler: " .. tostring(err))
+    end
+
+    if not self.keep_grab then
+        self:grabber():unpause()
     end
 end
 
