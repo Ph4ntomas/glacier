@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 
 use crate::signal::{Emitter, TryWithEmitter};
 
@@ -6,9 +6,11 @@ pub mod signal;
 
 //Widget Definitions
 pub mod base;
+pub mod clock;
 pub mod textbox;
 
 pub use textbox::TextBox;
+pub use clock::{ LocalClock, Clock };
 
 #[derive(Clone)]
 pub enum WidgetMessage {}
@@ -24,9 +26,22 @@ pub trait Widget: TryWithEmitter {
 
 pub struct State<Inner>(Arc<Mutex<Inner>>);
 
+#[derive(Clone)]
+pub struct WeakState<Inner>(Weak<Mutex<Inner>>);
+
+impl<Inner> WeakState<Inner> {
+    pub fn upgrade(&self) -> Option<State<Inner>> {
+        self.0.upgrade().map(State)
+    }
+}
+
 impl<Inner> State<Inner> {
-    fn new(inner: Inner) -> Self {
+    pub fn new(inner: Inner) -> Self {
         Self(Arc::new(Mutex::new(inner)))
+    }
+
+    pub fn downgrade(&self) -> WeakState<Inner> {
+        WeakState(Arc::downgrade(&self.0))
     }
 }
 
