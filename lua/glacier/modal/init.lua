@@ -368,7 +368,7 @@ end
 ---@class glacier.modal.Command
 ---@field pattern string[] Pattern to match.
 ---@field handler fun(cmd: glacier.modal.Command, ...) Command's handler.
----@field keep_grab boolean Unless true, input grabbing is paused while the handler is running.
+---@field keep_grab? boolean Unless true, input grabbing is paused while the handler is running.
 local Command = {}
 
 ---Create a new Command.
