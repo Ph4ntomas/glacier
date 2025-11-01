@@ -81,7 +81,7 @@ where
 {
     fn view_children(children: Arc<Mutex<Vec<Child<Msg>>>>) -> Vec<WidgetDef<BarMessage<Msg>>> {
         let children = children.try_lock().expect("Failed to lock children");
-        children.iter().map(Child::view).collect()
+        children.iter().filter_map(Child::view).collect()
     }
 
     fn update_children(children: Arc<Mutex<Vec<Child<Msg>>>>, msg: BarMessage<Msg>) {

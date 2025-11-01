@@ -102,10 +102,10 @@ where
 {
     type Message = Msg;
 
-    fn view(&self) -> snowcap_api::widget::WidgetDef<Self::Message> {
+    fn view(&self) -> Option<snowcap_api::widget::WidgetDef<Self::Message>> {
         let widget = Container::new(Text::new(self.content.clone()));
 
-        widget.into()
+        Some(widget.into())
     }
 }
 

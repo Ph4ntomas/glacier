@@ -18,7 +18,8 @@ pub enum WidgetMessage {}
 pub trait Widget: TryWithEmitter {
     type Message: Clone + From<WidgetMessage>;
 
-    fn view(&self) -> snowcap_api::widget::WidgetDef<Self::Message>;
+    fn view(&self) -> Option<snowcap_api::widget::WidgetDef<Self::Message>>;
+
     fn update(&mut self, msg: Self::Message) {
         let _ = msg;
     }
@@ -66,7 +67,7 @@ where
 {
     type Message = Inner::Message;
 
-    fn view(&self) -> snowcap_api::widget::WidgetDef<Self::Message> {
+    fn view(&self) -> Option<snowcap_api::widget::WidgetDef<Self::Message>> {
         self.0.lock().unwrap().view()
     }
 

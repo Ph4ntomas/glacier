@@ -26,9 +26,9 @@ where
         }
     }
 
-    pub(crate) fn view(&self) -> snowcap_api::widget::WidgetDef<BarMessage<Msg>> {
+    pub(crate) fn view(&self) -> Option<snowcap_api::widget::WidgetDef<BarMessage<Msg>>> {
         match self {
-            Self::Functional(cb) => cb(),
+            Self::Functional(cb) => Some(cb()),
             Self::Widget(w) => w.view(),
         }
     }
