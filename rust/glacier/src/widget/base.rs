@@ -22,6 +22,10 @@ impl WidgetBase {
             emitter: Emitter::default(),
         }
     }
+
+    pub fn id(&self) -> u32 {
+        self.id
+    }
 }
 
 impl Display for WidgetBase {

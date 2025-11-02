@@ -34,6 +34,16 @@ impl<Msg> From<WidgetMessage> for BarMessage<Msg> {
     }
 }
 
+impl<Msg> From<BarMessage<Msg>> for Option<WidgetMessage> {
+    fn from(value: BarMessage<Msg>) -> Self {
+        if let BarMessage::BuiltinWidget(w) = value {
+            Some(w)
+        } else {
+            None
+        }
+    }
+}
+
 impl<Msg> Debug for BarMessage<Msg>
 where
     Msg: Debug,

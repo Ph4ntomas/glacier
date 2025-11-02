@@ -7,13 +7,17 @@ pub mod signal;
 //Widget Definitions
 pub mod base;
 pub mod clock;
+pub mod taglist;
 pub mod textbox;
 
+pub use clock::{Clock, LocalClock};
 pub use textbox::TextBox;
-pub use clock::{ LocalClock, Clock };
+pub use taglist::TagList;
 
 #[derive(Clone)]
-pub enum WidgetMessage {}
+pub enum WidgetMessage {
+    TagList(taglist::Message),
+}
 
 pub trait Widget: TryWithEmitter {
     type Message: Clone + From<WidgetMessage>;
