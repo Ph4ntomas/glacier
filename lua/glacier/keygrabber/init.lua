@@ -137,18 +137,9 @@ function KeyGrabber:update_interactivity(interactivity)
         return false
     end
 
-    local client = require("snowcap.grpc.client").client
-
-    local ok, err = client:snowcap_layer_v1_LayerService_UpdateLayer({
-        layer_id = self.handle.id,
+    return self.handle:update({
         keyboard_interactivity = interactivity,
     })
-
-    if not ok then
-        Log.error("Could not set layer interactivity: " .. tostring(err))
-    end
-
-    return ok ~= nil
 end
 
 ---Pause this layer.

@@ -207,13 +207,11 @@ end
 ---@param focus boolean If true, set the layer interactivity to EXCLUSIVE.
 function Bar:focus(focus)
     local Layer = require("snowcap.layer")
-    local client = require("snowcap.grpc.client").client
 
     local interactivity = focus and Layer.keyboard_interactivity.EXCLUSIVE
         or Layer.keyboard_interactivity.NONE
 
-    local _, _ = client:snowcap_layer_v1_LayerService_UpdateLayer({
-        layer_id = self.handle.id,
+    self.handle:update({
         keyboard_interactivity = interactivity,
     })
 end
