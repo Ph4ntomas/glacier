@@ -2,21 +2,27 @@ use std::sync::{Arc, Mutex, Weak};
 
 use crate::signal::{Emitter, TryWithEmitter};
 
+pub mod message;
+pub mod operation;
 pub mod signal;
 
 //Widget Definitions
 pub mod base;
 pub mod clock;
+pub mod prompt;
 pub mod taglist;
 pub mod textbox;
 
 pub use clock::{Clock, LocalClock};
-pub use textbox::TextBox;
+pub use prompt::Prompt;
 pub use taglist::TagList;
+pub use textbox::TextBox;
 
 #[derive(Clone)]
 pub enum WidgetMessage {
+    Operation(operation::Operation),
     TagList(taglist::Message),
+    Prompt(prompt::Message),
 }
 
 pub trait Widget: TryWithEmitter {

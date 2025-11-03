@@ -14,7 +14,7 @@ use snowcap_api::{
 
 use crate::{
     signal::TryWithEmitter,
-    widget::{WidgetMessage, signal},
+    widget::{WidgetMessage, operation, signal},
 };
 
 mod child;
@@ -24,22 +24,27 @@ pub use child::children;
 #[derive(Clone)]
 pub enum BarMessage<Msg> {
     Empty,
+    Operation(operation::Operation),
     BuiltinWidget(WidgetMessage),
     Custom(Msg),
 }
 
 impl<Msg> From<WidgetMessage> for BarMessage<Msg> {
     fn from(value: WidgetMessage) -> Self {
-        Self::BuiltinWidget(value)
+        if let WidgetMessage::Operation(oper) = value {
+            Self::Operation(oper)
+        } else {
+            Self::BuiltinWidget(value)
+        }
     }
 }
 
 impl<Msg> From<BarMessage<Msg>> for Option<WidgetMessage> {
     fn from(value: BarMessage<Msg>) -> Self {
-        if let BarMessage::BuiltinWidget(w) = value {
-            Some(w)
-        } else {
-            None
+        match value {
+            BarMessage::Operation(oper) => Some(WidgetMessage::Operation(oper)),
+            BarMessage::BuiltinWidget(w) => Some(w),
+            _ => None,
         }
     }
 }
@@ -79,6 +84,7 @@ impl From<Style> for snowcap_api::widget::container::Style {
 }
 
 pub struct BarProgram<Msg> {
+    handle: WeakBarHandle<Msg>,
     style: Style,
     first: Weak<Mutex<Vec<Child<Msg>>>>,
     center: Weak<Mutex<Vec<Child<Msg>>>>,
@@ -155,7 +161,7 @@ where
 
 impl<Msg> widget::Program for BarProgram<Msg>
 where
-    Msg: Clone,
+    Msg: Clone + Send + 'static,
 {
     type Message = BarMessage<Msg>;
 
@@ -206,13 +212,37 @@ where
     }
 
     fn update(&mut self, msg: Self::Message) {
+        use operation::{Focusable, Operation as oper};
         match msg {
-            Self::Message::Empty => {}
-            _ => {
-                if let Some(children) = self.first.upgrade() {
-                    Self::update_children(children, msg.clone());
+            Self::Message::Empty => {
+                return;
+            }
+            Self::Message::Operation(oper::Focusable(Focusable::Focus(id))) => {
+                if let Some(mut handle) = self.handle.upgrade() {
+                    handle.focus(true);
+                    handle.operate(widget::operation::focusable::focus(id))
+                }
+
+                return;
+            }
+            Self::Message::Operation(oper::Focusable(Focusable::Unfocus)) => {
+                if let Some(mut handle) = self.handle.upgrade() {
+                    handle.focus(false);
                 }
             }
+            _ => {}
+        };
+
+        if let Some(children) = self.first.upgrade() {
+            Self::update_children(children, msg.clone());
+        }
+
+        if let Some(children) = self.center.upgrade() {
+            Self::update_children(children, msg.clone());
+        }
+
+        if let Some(children) = self.last.upgrade() {
+            Self::update_children(children, msg.clone());
         }
     }
 }
@@ -235,6 +265,20 @@ where
         WeakBarHandle(Arc::downgrade(&handle.0))
     }
 
+    pub fn focus(&mut self, focus: bool) {
+        let inner = self.0.try_lock().unwrap();
+
+        let interactivity = if focus {
+            snowcap_api::layer::KeyboardInteractivity::Exclusive
+        } else {
+            snowcap_api::layer::KeyboardInteractivity::None
+        };
+
+        if let Some(handle) = &*inner {
+            let _ = handle.set_keyboard_interactivity(interactivity);
+        }
+    }
+
     pub fn on_key_event<F>(&mut self, on_event: F)
     where
         F: FnMut(LayerHandle<BarMessage<Msg>>, KeyEvent) + Send + 'static,
@@ -243,6 +287,14 @@ where
 
         if let Some(handle) = &*inner {
             handle.on_key_event(on_event);
+        }
+    }
+
+    pub fn operate(&self, operation: widget::operation::Operation) {
+        let inner = self.0.try_lock().unwrap();
+
+        if let Some(handle) = &*inner {
+            handle.operate(operation);
         }
     }
 
@@ -281,17 +333,48 @@ where
 {
     fn process_children(handle: &BarHandle<Msg>, children: &mut Vec<Child<Msg>>) {
         for c in children {
-            let weak_handle = BarHandle::downgrade(handle);
-
             if let Some(mut emitter) = c.try_with_emitter() {
-                emitter.connect(move |_: signal::RedrawNeeded| {
-                    let Some(handle) = weak_handle.upgrade() else {
-                        return false;
-                    };
+                emitter.connect({
+                    let weak_handle = BarHandle::downgrade(handle);
+                    move |_: signal::RedrawNeeded| {
+                        let Some(handle) = weak_handle.upgrade() else {
+                            return false;
+                        };
 
-                    handle.send_message(BarMessage::Empty);
+                        handle.send_message(BarMessage::Empty);
 
-                    false
+                        false
+                    }
+                });
+
+                emitter.connect({
+                    let weak_handle = BarHandle::downgrade(handle);
+                    move |_: signal::RequestUnfocus| {
+                        let Some(handle) = weak_handle.upgrade() else {
+                            return false;
+                        };
+
+                        handle.send_message(BarMessage::Operation(
+                            operation::Focusable::Unfocus.into(),
+                        ));
+
+                        false
+                    }
+                });
+
+                emitter.connect({
+                    let weak_handle = BarHandle::downgrade(handle);
+                    move |signal::RequestFocus(id)| {
+                        let Some(handle) = weak_handle.upgrade() else {
+                            return false;
+                        };
+
+                        handle.send_message(BarMessage::Operation(
+                            operation::Focusable::Focus(id).into(),
+                        ));
+
+                        false
+                    }
                 });
             }
         }
@@ -350,7 +433,10 @@ where
             exclusive_dimension = 1;
         }
 
+        let handle = BarHandle::downgrade(&self.handle);
+
         let program = BarProgram::<Msg> {
+            handle,
             style: self.style.clone(),
             first: Arc::downgrade(&self.first),
             center: Arc::downgrade(&self.center),
@@ -368,7 +454,13 @@ where
             .expect("Could not create Layer for bar"),
         );
 
-        self.handle.on_key_event(|_, _| {});
+        self.handle.on_key_event(|handle, event| {
+            use xkbcommon::xkb::Keysym;
+
+            if event.pressed && event.key == Keysym::Escape {
+                handle.send_message(BarMessage::Operation(operation::Focusable::Unfocus.into()));
+            }
+        });
     }
 }
 
