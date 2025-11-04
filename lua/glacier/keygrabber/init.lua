@@ -51,9 +51,6 @@ local KeyGrabber = {}
 ---@return snowcap.widget.WidgetDef
 function KeyGrabber:view()
     return Widget.row({
-        style = {
-            background_color = Widget.color.from_rgba(0, 0, 0, 0),
-        },
         height = Widget.length.Fixed(1.0),
         width = Widget.length.Fixed(1.0),
         children = {},
@@ -88,10 +85,6 @@ function KeyGrabber:start()
         return
     end
 
-    if self.on_start then
-        self.on_start(self)
-    end
-
     handle:on_key_event(function(_, event)
         local captured = event.captured and not self.ignore_capture
 
@@ -109,6 +102,10 @@ function KeyGrabber:start()
     end)
 
     self.handle = handle
+
+    if self.on_start then
+        self.on_start(self)
+    end
 end
 
 ---Stop this KeyGrabber.
@@ -118,12 +115,12 @@ end
 ---Otherwise, call the `on_stop` callback if present, and close the Layer used to grab inputs.
 function KeyGrabber:stop()
     if self:running() then
+        self.handle:close()
+        self.handle = nil
+
         if self.on_stop then
             self.on_stop(self)
         end
-
-        self.handle:close()
-        self.handle = nil
     end
 end
 
