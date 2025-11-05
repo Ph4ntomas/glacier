@@ -8,31 +8,36 @@ use snowcap_api::{
     widget::Program,
 };
 
+type KeyPressCallback =
+    Box<dyn FnMut(&Handle, Modifiers, Keysym, Option<String>) + Send + Sync + 'static>;
+type KeyReleaseCallback = Box<dyn FnMut(&Handle, Modifiers, Keysym) + Send + Sync + 'static>;
+type KeyEventCallback = Box<dyn FnMut(&Handle, KeyEvent) + Send + Sync + 'static>;
+type StartCallback = Arc<dyn Fn(&Handle) + Send + Sync + 'static>;
+type StopCallback = Arc<dyn Fn(&Handle) + Send + Sync + 'static>;
+
 pub struct KeyGrabberProgram;
 
 #[derive(Default)]
 pub struct KeyCallbackData {
     ignore_capture: bool,
-    on_key_press:
-        Option<Box<dyn FnMut(&Handle, Modifiers, Keysym, Option<String>) + Send + Sync + 'static>>,
-    on_key_release: Option<Box<dyn FnMut(&Handle, Modifiers, Keysym) + Send + Sync + 'static>>,
-    on_key_event: Option<Box<dyn FnMut(&Handle, KeyEvent) + Send + Sync + 'static>>,
+    on_key_press: Option<KeyPressCallback>,
+    on_key_release: Option<KeyReleaseCallback>,
+    on_key_event: Option<KeyEventCallback>,
 }
 
 #[derive(Default)]
 pub struct Inner {
     handle: Option<LayerHandle<()>>,
     callback_data: Arc<Mutex<KeyCallbackData>>,
-    on_start: Option<Arc<dyn Fn(&Handle) + Send + Sync + 'static>>,
-    on_stop: Option<Arc<dyn Fn(&Handle) + Send + Sync + 'static>>,
+    on_start: Option<StartCallback>,
+    on_stop: Option<StopCallback>,
 }
 
-#[derive(Default)]
 pub struct Handle(Arc<Mutex<Inner>>);
 
-struct WeakHandle(Weak<Mutex<Inner>>);
+#[derive(Clone)]
+pub struct WeakHandle(Weak<Mutex<Inner>>);
 
-#[derive(Default)]
 pub struct KeyGrabber {
     handle: Handle,
 }
@@ -60,7 +65,7 @@ impl KeyGrabber {
         self.handle.unpause();
     }
 
-    pub fn handle(&self) -> Handle {
+    pub fn freeze(&self) -> Handle {
         Handle(self.handle.0.clone())
     }
 
@@ -117,10 +122,6 @@ impl KeyGrabber {
 }
 
 impl Handle {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     pub fn start(&self) {
         if self.running() {
             return;
@@ -179,7 +180,7 @@ impl Handle {
     }
 
     pub fn stop(&self) {
-        if let Some(handle) = &self.0.lock().unwrap().handle {
+        if let Some(handle) = &self.0.lock().unwrap().handle.take() {
             handle.close();
         } else {
             return;
@@ -206,7 +207,7 @@ impl Handle {
         self.0.lock().unwrap().handle.is_some()
     }
 
-    fn downgrade(&self) -> WeakHandle {
+    pub fn downgrade(&self) -> WeakHandle {
         WeakHandle(Arc::downgrade(&self.0))
     }
 
@@ -226,8 +227,8 @@ impl Handle {
 }
 
 impl WeakHandle {
-    fn upgrade(&self) -> Option<Handle> {
-        self.0.upgrade().map(|arc| Handle(arc))
+    pub fn upgrade(&self) -> Option<Handle> {
+        self.0.upgrade().map(Handle)
     }
 }
 
@@ -269,6 +270,22 @@ impl Inner {
         F: Fn(&Handle) + Send + Sync + 'static,
     {
         self.on_stop = Some(Arc::new(on_stop));
+    }
+}
+
+impl Default for KeyGrabber {
+    fn default() -> Self {
+        let inner = Inner::default();
+
+        Self {
+            handle: Handle(Arc::new(Mutex::new(inner))),
+        }
+    }
+}
+
+impl Clone for Handle {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
     }
 }
 
