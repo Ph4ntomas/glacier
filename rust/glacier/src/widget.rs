@@ -37,8 +37,13 @@ pub trait Widget: TryWithEmitter {
 
 pub struct State<Inner>(Arc<Mutex<Inner>>);
 
-#[derive(Clone)]
 pub struct WeakState<Inner>(Weak<Mutex<Inner>>);
+
+impl<Inner> Clone for WeakState<Inner> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
 
 impl<Inner> WeakState<Inner> {
     pub fn upgrade(&self) -> Option<State<Inner>> {

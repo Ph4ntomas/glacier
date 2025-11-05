@@ -4,7 +4,7 @@ use snowcap_api::widget::{container::Container, text::Text};
 
 use crate::{
     signal::{Emitter, WithEmitter},
-    widget::{State, Widget, WidgetMessage, WithState, base::WidgetBase, signal},
+    widget::{State, WeakState, Widget, WidgetMessage, WithState, base::WidgetBase, signal},
 };
 
 pub struct Inner<Msg> {
@@ -17,6 +17,9 @@ pub struct Inner<Msg> {
 pub struct TextBox<Msg> {
     state: State<Inner<Msg>>,
 }
+
+#[derive(Clone)]
+pub struct WeakTextBox<Msg>(WeakState<Inner<Msg>>);
 
 impl<Msg> TextBox<Msg> {
     pub fn new(content: impl Into<String>) -> Self {
@@ -37,6 +40,16 @@ impl<Msg> TextBox<Msg> {
         let mut state = self.state.0.lock().unwrap();
         state.content = content.into();
         state.emit(signal::RedrawNeeded);
+    }
+
+    pub fn downgrade(&self) -> WeakTextBox<Msg> {
+        WeakTextBox(self.state.downgrade())
+    }
+}
+
+impl<Msg> WeakTextBox<Msg> {
+    pub fn upgrade(&self) -> Option<TextBox<Msg>> {
+        self.0.upgrade().map(|state| TextBox { state })
     }
 }
 
