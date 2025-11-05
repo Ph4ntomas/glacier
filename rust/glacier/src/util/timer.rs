@@ -4,7 +4,7 @@ use std::{
 };
 use tokio::sync::mpsc;
 
-use crate::signal::{Emitter, Signal, WithEmitter};
+use crate::signal::{Emitter, HandlerPolicy, Signal, WithEmitter};
 
 #[derive(Clone, Signal)]
 pub struct Started(pub Timer);
@@ -67,7 +67,7 @@ impl Timer {
 
     pub fn with_callback<F>(&mut self, callback: F)
     where
-        F: Fn(Timeout) -> bool + Send + Sync + 'static,
+        F: Fn(Timeout) -> HandlerPolicy + Send + Sync + 'static,
     {
         self.with_emitter().connect(callback);
     }

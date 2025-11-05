@@ -10,11 +10,17 @@ pub trait Signal {
     fn signal_name() -> &'static str;
 }
 
-pub struct Handle<S: Signal>(Weak<dyn Fn(S) -> bool + Sync + Send>);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HandlerPolicy {
+    Keep,
+    Discard,
+}
+
+pub struct Handle<S: Signal>(Weak<dyn Fn(S) -> HandlerPolicy + Sync + Send>);
 
 #[derive(Default, Clone)]
 struct SignalEntry<S: Signal> {
-    callbacks: Vec<Arc<dyn Fn(S) -> bool + Sync + Send>>,
+    callbacks: Vec<Arc<dyn Fn(S) -> HandlerPolicy + Sync + Send>>,
 }
 
 impl<S> SignalEntry<S>
@@ -29,9 +35,9 @@ where
 
     fn add_callback<F>(&mut self, callback: F) -> Handle<S>
     where
-        F: Fn(S) -> bool + Sync + Send + 'static,
+        F: Fn(S) -> HandlerPolicy + Sync + Send + 'static,
     {
-        let callback: Arc<dyn Fn(S) -> bool + Sync + Send> = Arc::new(callback);
+        let callback: Arc<dyn Fn(S) -> HandlerPolicy + Sync + Send> = Arc::new(callback);
 
         let ret = Handle(Arc::downgrade(&callback));
 
@@ -53,7 +59,8 @@ where
     }
 
     fn emit(&mut self, signal: S) {
-        self.callbacks.retain_mut(|cb| !cb(signal.clone()));
+        self.callbacks
+            .retain_mut(|cb| cb(signal.clone()) == HandlerPolicy::Keep);
     }
 }
 
@@ -72,7 +79,7 @@ impl Emitter {
     pub fn connect<S, F>(&mut self, callback: F) -> Handle<S>
     where
         S: Signal + Clone + 'static,
-        F: Fn(S) -> bool + Sync + Send + 'static,
+        F: Fn(S) -> HandlerPolicy + Sync + Send + 'static,
     {
         let key = S::signal_name();
 
@@ -151,7 +158,7 @@ pub trait WithEmitter {
     where
         Self: Sized,
         S: Signal + Clone + 'static,
-        F: Fn(S) -> bool + Sync + Send + 'static,
+        F: Fn(S) -> HandlerPolicy + Sync + Send + 'static,
     {
         self.with_emitter().connect(callback)
     }

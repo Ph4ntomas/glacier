@@ -13,7 +13,7 @@ use snowcap_api::{
 };
 
 use crate::{
-    signal::TryWithEmitter,
+    signal::{HandlerPolicy, TryWithEmitter},
     widget::{WidgetMessage, operation, signal},
 };
 
@@ -338,12 +338,12 @@ where
                     let weak_handle = BarHandle::downgrade(handle);
                     move |_: signal::RedrawNeeded| {
                         let Some(handle) = weak_handle.upgrade() else {
-                            return false;
+                            return HandlerPolicy::Discard;
                         };
 
                         handle.send_message(BarMessage::Empty);
 
-                        false
+                        HandlerPolicy::Keep
                     }
                 });
 
@@ -351,14 +351,14 @@ where
                     let weak_handle = BarHandle::downgrade(handle);
                     move |_: signal::RequestUnfocus| {
                         let Some(handle) = weak_handle.upgrade() else {
-                            return false;
+                            return HandlerPolicy::Discard;
                         };
 
                         handle.send_message(BarMessage::Operation(
                             operation::Focusable::Unfocus.into(),
                         ));
 
-                        false
+                        HandlerPolicy::Keep
                     }
                 });
 
@@ -366,14 +366,14 @@ where
                     let weak_handle = BarHandle::downgrade(handle);
                     move |signal::RequestFocus(id)| {
                         let Some(handle) = weak_handle.upgrade() else {
-                            return false;
+                            return HandlerPolicy::Discard;
                         };
 
                         handle.send_message(BarMessage::Operation(
                             operation::Focusable::Focus(id).into(),
                         ));
 
-                        false
+                        HandlerPolicy::Keep
                     }
                 });
             }

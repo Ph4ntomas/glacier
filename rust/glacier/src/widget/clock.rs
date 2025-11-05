@@ -4,7 +4,7 @@ use chrono::{Local, TimeZone, Utc};
 use snowcap_api::widget::{container::Container, text::Text};
 
 use crate::{
-    signal::WithEmitter,
+    signal::{HandlerPolicy, WithEmitter},
     util::timer::Timer,
     widget::{State, Widget, WidgetMessage, WithState, base::WidgetBase, signal},
 };
@@ -57,7 +57,7 @@ where
 
         timer.with_callback(move |_| {
             let Some(state) = for_callback.upgrade() else {
-                return true;
+                return HandlerPolicy::Discard;
             };
 
             {
@@ -66,7 +66,7 @@ where
             }
 
             state.0.lock().unwrap().emit(signal::RedrawNeeded);
-            false
+            HandlerPolicy::Keep
         });
         timer.start(false);
 
