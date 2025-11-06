@@ -61,6 +61,10 @@ impl Timer {
         ret
     }
 
+    pub fn interval(&mut self, interval: Duration) {
+        self.handle.lock().unwrap().interval = interval;
+    }
+
     pub fn repeat(&mut self, repeat: bool) {
         self.handle.lock().unwrap().repeat = repeat;
     }
