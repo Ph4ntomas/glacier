@@ -3,36 +3,37 @@ use std::marker::PhantomData;
 use snowcap_api::widget::{
     Alignment, Border, Length, Padding,
     container::Container,
-    font::{self, Font},
-    text_input::{self, Icon, TextInput},
+    font,
+    text_input::{Icon, TextInput},
 };
 
 use crate::{
     color,
     signal::WithEmitter,
     widget::{
-        State, Widget, WidgetMessage, WithState,
+        State, WeakState, Widget, WidgetMessage, WithState,
         base::WidgetBase,
         message::{self, MessageBuilder},
         operation, signal,
     },
 };
 
+pub mod style;
+pub use style::{PromptStyle, Style};
+
 #[derive(Clone)]
 pub struct Prompt<Msg> {
     state: State<Inner<Msg>>,
 }
 
+#[derive(Clone)]
+pub struct WeakPrompt<Msg>(WeakState<Inner<Msg>>);
+
 pub struct Inner<Msg> {
     base: WidgetBase,
     placeholder: String,
-    font: snowcap_api::widget::font::Font,
-    icon: snowcap_api::widget::text_input::Icon,
-    padding: snowcap_api::widget::Padding,
-    height: snowcap_api::widget::Length,
-    width: snowcap_api::widget::Length,
-    style: snowcap_api::widget::text_input::Styles,
     content: String,
+    style: Style,
     active: bool,
     id: String,
     message_builder: MessageBuilder<Action>,
@@ -47,59 +48,40 @@ pub enum Action {
 
 pub type Message = message::Message<Action>;
 
+pub fn default_style() -> Style {
+    Style::new()
+        .font(
+            font::Font::new()
+                .family(font::Family::Monospace)
+                .weight(font::Weight::Semibold),
+        )
+        .icon(Icon::new().code_point('').spacing(4.0))
+        .bg_color(color::from_hex_alpha("#000000", 0.0))
+        .border(Border {
+            width: Some(0.),
+            ..Default::default()
+        })
+        .padding(Padding::from(0.))
+}
+
 impl<Msg> Prompt<Msg>
 where
     Msg: Clone + Send + Sync + 'static,
 {
     const WIDGET_TYPE: &'static str = "Prompt";
+
     pub fn new() -> Self {
         let base = WidgetBase::new(Self::WIDGET_TYPE);
         let id = base.to_string();
         let message_builder = MessageBuilder::new(base.id());
 
-        let font = Font::new()
-            .family(font::Family::Monospace)
-            .weight(font::Weight::Semibold);
-
-        let icon = Icon {
-            font: Font::default(),
-            code_point: '',
-            pixels: None,
-            spacing: 4.0,
-            side: snowcap_api::widget::text_input::Side::Left,
-        };
-
-        let padding = Padding {
-            top: 0.0,
-            bottom: 0.0,
-            ..Padding::default()
-        };
-
-        let height = Length::Fill;
-        let width = Length::Fill;
-
-        let style_active = text_input::Style::new()
-            .background(color::from_hex_alpha("#000000", 0.0).into())
-            .border(Border {
-                width: Some(0.0),
-                ..Border::default()
-            });
-
-        let style = text_input::Styles::new()
-            .active(style_active.clone())
-            .focused(style_active.clone())
-            .disabled(style_active);
+        let style = default_style();
 
         let state = State::new(Inner {
             base,
             placeholder: String::default(),
-            font,
-            icon,
-            padding,
-            height,
-            width,
-            style,
             content: String::default(),
+            style,
             active: false,
             id,
             message_builder,
@@ -107,6 +89,12 @@ where
         });
 
         Self { state }
+    }
+
+    pub fn style(self, style: Style) -> Self {
+        self.state.0.lock().unwrap().style = style;
+        self.emit(signal::RedrawNeeded);
+        self
     }
 
     pub fn deactivate(&mut self) {
@@ -121,6 +109,10 @@ where
         self.state.0.lock().unwrap().unfocus();
     }
 
+    pub fn downgrade(&self) -> WeakPrompt<Msg> {
+        WeakPrompt(self.state.downgrade())
+    }
+
     pub fn spawn(input: &str) {
         if input.is_empty() {
             return;
@@ -133,6 +125,12 @@ where
         };
 
         pinnacle_api::process::Command::new(cmd).args(split).spawn();
+    }
+}
+
+impl<Msg> WeakPrompt<Msg> {
+    pub fn upgrade(&self) -> Option<Prompt<Msg>> {
+        self.0.upgrade().map(|state| Prompt { state })
     }
 }
 
@@ -198,6 +196,12 @@ impl<Msg> WithEmitter for Inner<Msg> {
     }
 }
 
+impl<Msg> WithEmitter for Prompt<Msg> {
+    fn with_emitter(&self) -> crate::signal::Emitter {
+        self.state.0.lock().unwrap().with_emitter()
+    }
+}
+
 impl<Msg> Widget for Inner<Msg>
 where
     Msg: Clone + From<WidgetMessage> + Into<Option<WidgetMessage>> + Send + Sync + 'static,
@@ -209,21 +213,22 @@ where
             return None;
         }
 
-        let inner = TextInput::new(&self.placeholder, &self.content)
+        let mut inner = TextInput::new(&self.placeholder, &self.content)
             .id(&self.id)
             .on_input({
                 let builder = self.message_builder;
                 move |input| Self::on_input(builder, input).into()
             })
             .on_submit(self.message_builder.submit().into())
-            .padding(self.padding)
-            .font(self.font.clone())
-            .icon(self.icon.clone())
-            .style(self.style.clone());
+            .style(self.style.clone().into());
+
+        inner.padding = self.style.padding;
+        inner.font = self.style.font.clone();
+        inner.icon = self.style.icon.clone();
 
         let prompt = Container::new(inner)
-            .height(self.height)
-            .width(self.width)
+            .height(Length::Fill)
+            .width(Length::Fill)
             .vertical_alignment(Alignment::Center);
 
         Some(prompt.into())

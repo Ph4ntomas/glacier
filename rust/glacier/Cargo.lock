@@ -34,7 +34,7 @@ checksum = "9035ad2d096bed7955a320ee7e2230574d28fd3c3a0f186cbea1ff3c7eed5dbb"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.108",
+ "syn 2.0.109",
 ]
 
 [[package]]
@@ -309,7 +309,7 @@ checksum = "162ee34ebcb7c64a8abebc059ce0fee27c2262618d7b60ed8faf72fef13c3650"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.108",
+ "syn 2.0.109",
 ]
 
 [[package]]
@@ -372,7 +372,7 @@ name = "glacier-derive"
 version = "0.1.0"
 dependencies = [
  "quote",
- "syn 2.0.108",
+ "syn 2.0.109",
 ]
 
 [[package]]
@@ -664,7 +664,7 @@ dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.108",
+ "syn 2.0.109",
 ]
 
 [[package]]
@@ -715,7 +715,7 @@ checksum = "6e918e4ff8c4549eb882f14b3a4bc8c8bc93de829416eacf579f1207a8fbf861"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.108",
+ "syn 2.0.109",
 ]
 
 [[package]]
@@ -733,7 +733,7 @@ checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 [[package]]
 name = "pinnacle-api"
 version = "0.1.0"
-source = "git+http://github.com/Ph4ntomas/pinnacle?branch=next#ef4b7cad4cc5d55281c6775e3656440a74bc270a"
+source = "git+http://github.com/Ph4ntomas/pinnacle?branch=next#3e8f235df155ed60546cd60eff922000ac7dfb5b"
 dependencies = [
  "bitflags",
  "futures",
@@ -752,7 +752,7 @@ dependencies = [
 [[package]]
 name = "pinnacle-api-defs"
 version = "0.0.1"
-source = "git+http://github.com/Ph4ntomas/pinnacle?branch=next#ef4b7cad4cc5d55281c6775e3656440a74bc270a"
+source = "git+http://github.com/Ph4ntomas/pinnacle?branch=next#3e8f235df155ed60546cd60eff922000ac7dfb5b"
 dependencies = [
  "prost",
  "tonic",
@@ -767,7 +767,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
 dependencies = [
  "proc-macro2",
- "syn 2.0.108",
+ "syn 2.0.109",
 ]
 
 [[package]]
@@ -814,7 +814,7 @@ dependencies = [
  "prost",
  "prost-types",
  "regex",
- "syn 2.0.108",
+ "syn 2.0.109",
  "tempfile",
 ]
 
@@ -828,7 +828,7 @@ dependencies = [
  "itertools",
  "proc-macro2",
  "quote",
- "syn 2.0.108",
+ "syn 2.0.109",
 ]
 
 [[package]]
@@ -929,7 +929,7 @@ checksum = "d540f220d3187173da220f885ab66608367b6574e925011a9353e4badda91d79"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.108",
+ "syn 2.0.109",
 ]
 
 [[package]]
@@ -962,7 +962,7 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 [[package]]
 name = "snowcap-api"
 version = "0.1.0"
-source = "git+http://github.com/Ph4ntomas/pinnacle?branch=next#ef4b7cad4cc5d55281c6775e3656440a74bc270a"
+source = "git+http://github.com/Ph4ntomas/pinnacle?branch=next#3e8f235df155ed60546cd60eff922000ac7dfb5b"
 dependencies = [
  "from_variants",
  "futures",
@@ -981,7 +981,7 @@ dependencies = [
 [[package]]
 name = "snowcap-api-defs"
 version = "0.1.0"
-source = "git+http://github.com/Ph4ntomas/pinnacle?branch=next#ef4b7cad4cc5d55281c6775e3656440a74bc270a"
+source = "git+http://github.com/Ph4ntomas/pinnacle?branch=next#3e8f235df155ed60546cd60eff922000ac7dfb5b"
 dependencies = [
  "prost",
  "tonic",
@@ -1028,9 +1028,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.108"
+version = "2.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da58917d35242480a05c2897064da0a80589a2a0476c9a3f2fdc83b53502e917"
+checksum = "2f17c7e013e88258aa9543dcbe81aca68a667a9ac37cd69c9fbc07858bfe0e2f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1073,7 +1073,7 @@ checksum = "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.108",
+ "syn 2.0.109",
 ]
 
 [[package]]
@@ -1100,7 +1100,7 @@ checksum = "af407857209536a95c8e56f8231ef2c2e2aff839b22e07a1ffcbc617e9db9fa5"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.108",
+ "syn 2.0.109",
 ]
 
 [[package]]
@@ -1197,7 +1197,7 @@ dependencies = [
  "prost-build",
  "prost-types",
  "quote",
- "syn 2.0.108",
+ "syn 2.0.109",
 ]
 
 [[package]]
@@ -1250,7 +1250,7 @@ checksum = "81383ab64e72a7a8b8e13130c49e3dab29def6d0c7d76a03087b3cf71c5c6903"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.108",
+ "syn 2.0.109",
 ]
 
 [[package]]
@@ -1340,7 +1340,7 @@ dependencies = [
  "bumpalo",
  "proc-macro2",
  "quote",
- "syn 2.0.108",
+ "syn 2.0.109",
  "wasm-bindgen-shared",
 ]
 
@@ -1383,7 +1383,7 @@ checksum = "053e2e040ab57b9dc951b72c264860db7eb3b0200ba345b4e4c3b14f67855ddf"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.108",
+ "syn 2.0.109",
 ]
 
 [[package]]
@@ -1394,7 +1394,7 @@ checksum = "3f316c4a2570ba26bbec722032c4099d8c8bc095efccdc15688708623367e358"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.108",
+ "syn 2.0.109",
 ]
 
 [[package]]
