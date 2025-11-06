@@ -6,4 +6,9 @@ pub mod signal;
 pub mod util;
 pub mod widget;
 
+pub mod misc {
+    pub mod image;
+    pub mod separator;
+}
+
 pub use keygrabber::KeyGrabber;
