@@ -1,17 +1,18 @@
 use snowcap_api::widget::WidgetDef;
 
 use crate::{
-    bar::BarMessage,
     signal::TryWithEmitter,
     widget::{Widget, WithState},
 };
+
+use super::BarMessage;
 
 pub enum Child<Msg> {
     Functional(Box<dyn Fn() -> WidgetDef<BarMessage<Msg>> + Sync + Send + 'static>),
     Widget(Box<dyn Widget<Message = BarMessage<Msg>> + Sync + Send + 'static>),
 }
 
-///Disambiguisation marker for functional-style children.
+/// Disambiguisation marker for functional-style children.
 pub struct Functional<F, Msg>(pub F)
 where
     F: Fn() -> WidgetDef<BarMessage<Msg>> + Sync + Send + 'static;

@@ -1,21 +1,22 @@
 use std::{
-    fmt::Debug,
     num::NonZero,
     sync::{Arc, Mutex, Weak},
 };
 
 use pinnacle_api::output::OutputHandle;
-
 use snowcap_api::{
-    input::KeyEvent,
-    layer::LayerHandle,
-    widget::{self, Border, Color, Padding, WidgetDef},
+    layer::{self, KeyboardInteractivity, LayerHandle},
+    widget::{self, Padding, Program, WidgetDef, container::Container, row::Row},
 };
 
 use crate::{
+    color,
     signal::{HandlerPolicy, TryWithEmitter},
     widget::{WidgetMessage, operation, signal},
 };
+
+pub mod style;
+pub use style::Style;
 
 mod child;
 use child::Child;
@@ -27,6 +28,389 @@ pub enum BarMessage<Msg> {
     Operation(operation::Operation),
     BuiltinWidget(WidgetMessage),
     Custom(Msg),
+}
+
+type BarWidgetDef<Msg> = WidgetDef<BarMessage<Msg>>;
+type ViewCallback<Msg> =
+    Box<dyn Fn(Vec<BarWidgetDef<Msg>>, &Style) -> BarWidgetDef<Msg> + Send + Sync>;
+
+pub struct Inner<Msg> {
+    style: Style,
+    first: Arc<Mutex<Vec<Child<Msg>>>>,
+    center: Arc<Mutex<Vec<Child<Msg>>>>,
+    last: Arc<Mutex<Vec<Child<Msg>>>>,
+
+    first_view: Option<ViewCallback<Msg>>,
+    center_view: Option<ViewCallback<Msg>>,
+    last_view: Option<ViewCallback<Msg>>,
+    handle: Option<LayerHandle<BarMessage<Msg>>>,
+}
+
+pub struct BarProgram<Msg>(WeakBar<Msg>);
+
+pub struct Bar<Msg> {
+    state: Arc<Mutex<Inner<Msg>>>,
+}
+
+#[derive(Clone)]
+pub struct WeakBar<Msg>(Weak<Mutex<Inner<Msg>>>);
+
+pub fn default_style() -> Style {
+    Style::new()
+        .pixels(24.)
+        .padding(Padding::from(8.))
+        .bg_color(color::from_hex("#1a1a1a"))
+}
+
+impl<Msg> Bar<Msg>
+where
+    Msg: Clone + Send + 'static,
+{
+    pub fn new() -> Self {
+        let inner = Inner {
+            style: default_style(),
+            first: Default::default(),
+            center: Default::default(),
+            last: Default::default(),
+            first_view: None,
+            center_view: None,
+            last_view: None,
+            handle: None,
+        };
+
+        Self {
+            state: Arc::new(Mutex::new(inner)),
+        }
+    }
+
+    pub fn style(self, style: Style) -> Self {
+        self.state.lock().unwrap().style = style;
+        if let Some(handle) = self.get_layer() {
+            handle.send_message(BarMessage::Empty);
+        }
+        self
+    }
+
+    pub fn first(self, children: Vec<Child<Msg>>) -> Self {
+        let children = self.process_children(children);
+        *self.state.lock().unwrap().first.lock().unwrap() = children;
+        self
+    }
+
+    pub fn center(self, children: Vec<Child<Msg>>) -> Self {
+        let children = self.process_children(children);
+        *self.state.lock().unwrap().center.lock().unwrap() = children;
+        self
+    }
+
+    pub fn last(self, children: Vec<Child<Msg>>) -> Self {
+        let children = self.process_children(children);
+        *self.state.lock().unwrap().last.lock().unwrap() = children;
+        self
+    }
+
+    pub fn show(self, output: Option<OutputHandle>) -> Self {
+        let mut restore_output = None;
+        let focused_output = pinnacle_api::output::get_focused();
+
+        if output.is_some() {
+            restore_output = focused_output.clone();
+        }
+
+        let output = output.or(focused_output).expect("Bar needs an output.");
+        output.focus();
+
+        let exclusive = self.get_exclusive_size();
+        let program = BarProgram(self.downgrade());
+
+        let handle = layer::new_widget(
+            program,
+            Some(layer::Anchor::Top),
+            layer::KeyboardInteractivity::None,
+            layer::ExclusiveZone::Exclusive(exclusive),
+            layer::ZLayer::Top,
+        )
+        .expect("Could not create Layer for this bar.");
+
+        handle.on_key_event(|handle, event| {
+            use xkbcommon::xkb::Keysym;
+
+            if event.pressed && event.key == Keysym::Escape {
+                handle.send_message(BarMessage::Operation(operation::Focusable::Unfocus.into()));
+            }
+        });
+
+        self.state.lock().unwrap().handle = Some(handle);
+
+        if let Some(output) = restore_output {
+            output.focus();
+        }
+
+        self
+    }
+
+    pub fn close(self) {
+        if let Some(handle) = self.state.lock().unwrap().handle.take() {
+            handle.close();
+        }
+    }
+
+    pub fn downgrade(&self) -> WeakBar<Msg> {
+        WeakBar(Arc::downgrade(&self.state))
+    }
+
+    pub fn focus(&self) {
+        if let Some(handle) = self.get_layer() {
+            let _ = handle
+                .set_keyboard_interactivity(snowcap_api::layer::KeyboardInteractivity::Exclusive);
+        }
+    }
+
+    pub fn unfocus(&self) {
+        if let Some(handle) = self.get_layer() {
+            let _ =
+                handle.set_keyboard_interactivity(snowcap_api::layer::KeyboardInteractivity::None);
+        }
+    }
+
+    fn get_exclusive_size(&self) -> NonZero<u32> {
+        let state = self.state.lock().unwrap();
+
+        let sum_dimension =
+            state.style.pixels + state.style.padding.map(|p| p.top + p.bottom).unwrap_or(0.0);
+        let exclusive = u32::max(1, sum_dimension as u32);
+
+        NonZero::new(exclusive).unwrap()
+    }
+
+    fn get_layer(&self) -> Option<LayerHandle<BarMessage<Msg>>> {
+        self.state.lock().unwrap().handle.clone()
+    }
+
+    fn process_child(&self, child: Child<Msg>) -> Child<Msg> {
+        if let Some(mut emitter) = child.try_with_emitter() {
+            emitter.connect({
+                let weak = self.downgrade();
+                move |_: signal::RedrawNeeded| {
+                    let Some(bar) = weak.upgrade() else {
+                        return HandlerPolicy::Discard;
+                    };
+
+                    if let Some(handle) = bar.get_layer() {
+                        handle.send_message(BarMessage::Empty);
+                    }
+
+                    HandlerPolicy::Keep
+                }
+            });
+
+            emitter.connect({
+                let weak = self.downgrade();
+                move |_: signal::RequestUnfocus| {
+                    let Some(bar) = weak.upgrade() else {
+                        return HandlerPolicy::Discard;
+                    };
+
+                    if let Some(handle) = bar.get_layer() {
+                        handle.send_message(BarMessage::Operation(
+                            operation::Focusable::Unfocus.into(),
+                        ));
+                    }
+
+                    HandlerPolicy::Keep
+                }
+            });
+
+            emitter.connect({
+                let weak = self.downgrade();
+                move |signal::RequestFocus(id)| {
+                    let Some(bar) = weak.upgrade() else {
+                        return HandlerPolicy::Discard;
+                    };
+
+                    if let Some(handle) = bar.get_layer() {
+                        handle.send_message(BarMessage::Operation(
+                            operation::Focusable::Focus(id).into(),
+                        ));
+                    }
+
+                    HandlerPolicy::Keep
+                }
+            });
+        }
+        child
+    }
+
+    fn process_children(&self, children: Vec<Child<Msg>>) -> Vec<Child<Msg>> {
+        children
+            .into_iter()
+            .map(|c| self.process_child(c))
+            .collect()
+    }
+
+    pub fn default_first_view(
+        children: Vec<BarWidgetDef<Msg>>,
+        style: &Style,
+    ) -> BarWidgetDef<Msg> {
+        let spacing = style.get_first_spacing();
+        let mut row = Row::new_with_children(children)
+            .height(widget::Length::Fill)
+            .item_alignment(widget::Alignment::Start)
+            .width(widget::Length::Shrink);
+        row.spacing = spacing;
+
+        row.into()
+    }
+
+    pub fn default_center_view(
+        children: Vec<BarWidgetDef<Msg>>,
+        style: &Style,
+    ) -> BarWidgetDef<Msg> {
+        let spacing = style.get_center_spacing();
+        let mut row = Row::new_with_children(children)
+            .height(widget::Length::Fill)
+            .item_alignment(widget::Alignment::Start)
+            .width(widget::Length::Fill);
+        row.spacing = spacing;
+
+        row.into()
+    }
+
+    pub fn default_last_view(children: Vec<BarWidgetDef<Msg>>, style: &Style) -> BarWidgetDef<Msg> {
+        let spacing = style.get_last_spacing();
+        let mut row = Row::new_with_children(children)
+            .height(widget::Length::Fill)
+            .item_alignment(widget::Alignment::End)
+            .width(widget::Length::Shrink);
+        row.spacing = spacing;
+
+        row.into()
+    }
+}
+
+impl<Msg> WeakBar<Msg> {
+    pub fn upgrade(&self) -> Option<Bar<Msg>> {
+        self.0.upgrade().map(|state| Bar { state })
+    }
+}
+
+impl<Msg> BarProgram<Msg>
+where
+    Msg: Clone,
+{
+    fn view_children(children: &Arc<Mutex<Vec<Child<Msg>>>>) -> Vec<WidgetDef<BarMessage<Msg>>> {
+        children
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(Child::view)
+            .collect()
+    }
+
+    fn update_children(children: Arc<Mutex<Vec<Child<Msg>>>>, msg: BarMessage<Msg>) {
+        children
+            .lock()
+            .unwrap()
+            .iter_mut()
+            .for_each(move |c| c.update(msg.clone()))
+    }
+}
+
+impl<Msg> Program for BarProgram<Msg>
+where
+    Msg: Clone + Send + 'static,
+{
+    type Message = BarMessage<Msg>;
+
+    fn view(&self) -> snowcap_api::widget::WidgetDef<Self::Message> {
+        let Some(bar) = self.0.upgrade() else {
+            return Row::new().into();
+        };
+
+        let state = bar.state.lock().unwrap();
+
+        let children = Self::view_children(&state.first);
+        let first_view = if let Some(view) = &state.first_view {
+            view(children, &state.style)
+        } else {
+            Bar::default_first_view(children, &state.style)
+        };
+
+        let children = Self::view_children(&state.center);
+        let center_view = if let Some(view) = &state.center_view {
+            view(children, &state.style)
+        } else {
+            Bar::default_center_view(children, &state.style)
+        };
+
+        let children = Self::view_children(&state.last);
+        let last_view = if let Some(view) = &state.last_view {
+            view(children, &state.style)
+        } else {
+            Bar::default_last_view(children, &state.style)
+        };
+
+        let mut row = Row::new_with_children([first_view, center_view, last_view])
+            .item_alignment(widget::Alignment::Start)
+            .height(widget::Length::Fixed(state.style.pixels));
+        row.spacing = state.style.spacing;
+
+        let padding = state.style.padding;
+        let mut view = Container::new(row)
+            .width(widget::Length::Fill)
+            .vertical_alignment(widget::Alignment::Start)
+            .horizontal_alignment(widget::Alignment::Start)
+            .style(state.style.clone().into());
+
+        view.padding = padding;
+
+        view.into()
+    }
+
+    fn update(&mut self, msg: Self::Message) {
+        use operation::{Focusable, Operation as oper};
+
+        let Some(bar) = self.0.upgrade() else {
+            return;
+        };
+
+        match msg {
+            Self::Message::Empty => {
+                return;
+            }
+            Self::Message::Operation(oper::Focusable(Focusable::Focus(id))) => {
+                if let Some(handle) = bar.get_layer() {
+                    let _ = handle.set_keyboard_interactivity(KeyboardInteractivity::Exclusive);
+                    handle.operate(widget::operation::focusable::focus(id));
+                }
+
+                return;
+            }
+            Self::Message::Operation(oper::Focusable(Focusable::Unfocus)) => {
+                if let Some(handle) = bar.get_layer() {
+                    let _ = handle.set_keyboard_interactivity(KeyboardInteractivity::None);
+                }
+            }
+            _ => {}
+        };
+
+        let first = bar.state.lock().unwrap().first.clone();
+        let center = bar.state.lock().unwrap().center.clone();
+        let last = bar.state.lock().unwrap().last.clone();
+
+        Self::update_children(first, msg.clone());
+        Self::update_children(center, msg.clone());
+        Self::update_children(last, msg.clone());
+    }
+}
+
+impl<Msg> Default for Bar<Msg>
+where
+    Msg: Clone + Send + 'static,
+{
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<Msg> From<WidgetMessage> for BarMessage<Msg> {
@@ -47,540 +431,4 @@ impl<Msg> From<BarMessage<Msg>> for Option<WidgetMessage> {
             _ => None,
         }
     }
-}
-
-impl<Msg> Debug for BarMessage<Msg>
-where
-    Msg: Debug,
-{
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
-    }
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct Style {
-    /// Dimension of the bar, in pixel.
-    dimension: f32,
-    padding: Option<widget::Padding>,
-    background_color: Option<widget::Color>,
-    border: Option<widget::Border>,
-    spacing: Option<f32>,
-}
-
-impl From<Style> for snowcap_api::widget::container::Style {
-    fn from(value: Style) -> Self {
-        let Style {
-            background_color,
-            border,
-            ..
-        } = value;
-        Self {
-            text_color: None,
-            background_color,
-            border,
-        }
-    }
-}
-
-pub struct BarProgram<Msg> {
-    handle: WeakBarHandle<Msg>,
-    style: Style,
-    first: Weak<Mutex<Vec<Child<Msg>>>>,
-    center: Weak<Mutex<Vec<Child<Msg>>>>,
-    last: Weak<Mutex<Vec<Child<Msg>>>>,
-}
-
-impl<Msg> BarProgram<Msg>
-where
-    Msg: Clone,
-{
-    fn view_children(children: Arc<Mutex<Vec<Child<Msg>>>>) -> Vec<WidgetDef<BarMessage<Msg>>> {
-        let children = children.try_lock().expect("Failed to lock children");
-        children.iter().filter_map(Child::view).collect()
-    }
-
-    fn update_children(children: Arc<Mutex<Vec<Child<Msg>>>>, msg: BarMessage<Msg>) {
-        let mut children = children.try_lock().expect("Failed to lock children");
-        (*children)
-            .iter_mut()
-            .for_each(move |c| c.update(msg.clone()))
-    }
-
-    fn render_first(
-        children: Vec<WidgetDef<BarMessage<Msg>>>,
-        style: &Style,
-    ) -> WidgetDef<BarMessage<Msg>> {
-        use widget::row::Row;
-        let mut children = Row::new_with_children(children)
-            .item_alignment(widget::Alignment::Start)
-            .height(widget::Length::Fill)
-            .width(widget::Length::Shrink);
-
-        if let Some(spacing) = style.spacing {
-            children = children.spacing(spacing);
-        }
-
-        children.into()
-    }
-
-    fn render_center(
-        children: Vec<WidgetDef<BarMessage<Msg>>>,
-        style: &Style,
-    ) -> WidgetDef<BarMessage<Msg>> {
-        use widget::row::Row;
-        let mut children = Row::new_with_children(children)
-            .item_alignment(widget::Alignment::Start)
-            .height(widget::Length::Fill)
-            .width(widget::Length::Fill);
-
-        if let Some(spacing) = style.spacing {
-            children = children.spacing(spacing);
-        }
-
-        children.into()
-    }
-
-    fn render_last(
-        children: Vec<WidgetDef<BarMessage<Msg>>>,
-        style: &Style,
-    ) -> WidgetDef<BarMessage<Msg>> {
-        use widget::row::Row;
-        let mut children = Row::new_with_children(children)
-            .item_alignment(widget::Alignment::End)
-            .height(widget::Length::Fill)
-            .width(widget::Length::Shrink);
-
-        if let Some(spacing) = style.spacing {
-            children = children.spacing(spacing);
-        }
-
-        children.into()
-    }
-}
-
-impl<Msg> widget::Program for BarProgram<Msg>
-where
-    Msg: Clone + Send + 'static,
-{
-    type Message = BarMessage<Msg>;
-
-    fn view(&self) -> widget::WidgetDef<Self::Message> {
-        use widget::container::Container;
-        use widget::row::Row;
-
-        let first_children = self
-            .first
-            .upgrade()
-            .map(Self::view_children)
-            .unwrap_or_default();
-
-        let center_children = self
-            .center
-            .upgrade()
-            .map(Self::view_children)
-            .unwrap_or_default();
-
-        let last_children = self
-            .last
-            .upgrade()
-            .map(Self::view_children)
-            .unwrap_or_default();
-
-        let mut children = Row::new()
-            .item_alignment(widget::Alignment::Start)
-            .height(widget::Length::Fixed(self.style.dimension))
-            .push(Self::render_first(first_children, &self.style))
-            .push(Self::render_center(center_children, &self.style))
-            .push(Self::render_last(last_children, &self.style));
-
-        if let Some(spacing) = self.style.spacing {
-            children = children.spacing(spacing);
-        }
-
-        let mut container = Container::new(children)
-            .width(widget::Length::Fill)
-            .vertical_alignment(widget::Alignment::Start)
-            .horizontal_alignment(widget::Alignment::Start)
-            .style(self.style.clone().into());
-
-        if let Some(padding) = self.style.padding {
-            container = container.padding(padding);
-        }
-
-        container.into()
-    }
-
-    fn update(&mut self, msg: Self::Message) {
-        use operation::{Focusable, Operation as oper};
-        match msg {
-            Self::Message::Empty => {
-                return;
-            }
-            Self::Message::Operation(oper::Focusable(Focusable::Focus(id))) => {
-                if let Some(mut handle) = self.handle.upgrade() {
-                    handle.focus(true);
-                    handle.operate(widget::operation::focusable::focus(id))
-                }
-
-                return;
-            }
-            Self::Message::Operation(oper::Focusable(Focusable::Unfocus)) => {
-                if let Some(mut handle) = self.handle.upgrade() {
-                    handle.focus(false);
-                }
-            }
-            _ => {}
-        };
-
-        if let Some(children) = self.first.upgrade() {
-            Self::update_children(children, msg.clone());
-        }
-
-        if let Some(children) = self.center.upgrade() {
-            Self::update_children(children, msg.clone());
-        }
-
-        if let Some(children) = self.last.upgrade() {
-            Self::update_children(children, msg.clone());
-        }
-    }
-}
-
-struct BarHandle<Msg>(Arc<Mutex<Option<snowcap_api::layer::LayerHandle<BarMessage<Msg>>>>>);
-
-struct WeakBarHandle<Msg>(Weak<Mutex<Option<snowcap_api::layer::LayerHandle<BarMessage<Msg>>>>>);
-
-impl<Msg> BarHandle<Msg>
-where
-    Msg: Send + Clone + 'static,
-{
-    pub fn set(&mut self, handle: LayerHandle<BarMessage<Msg>>) {
-        let mut inner = self.0.try_lock().unwrap();
-
-        *inner = Some(handle)
-    }
-
-    pub fn downgrade(handle: &Self) -> WeakBarHandle<Msg> {
-        WeakBarHandle(Arc::downgrade(&handle.0))
-    }
-
-    pub fn focus(&mut self, focus: bool) {
-        let inner = self.0.try_lock().unwrap();
-
-        let interactivity = if focus {
-            snowcap_api::layer::KeyboardInteractivity::Exclusive
-        } else {
-            snowcap_api::layer::KeyboardInteractivity::None
-        };
-
-        if let Some(handle) = &*inner {
-            let _ = handle.set_keyboard_interactivity(interactivity);
-        }
-    }
-
-    pub fn on_key_event<F>(&mut self, on_event: F)
-    where
-        F: FnMut(LayerHandle<BarMessage<Msg>>, KeyEvent) + Send + 'static,
-    {
-        let inner = self.0.try_lock().unwrap();
-
-        if let Some(handle) = &*inner {
-            handle.on_key_event(on_event);
-        }
-    }
-
-    pub fn operate(&self, operation: widget::operation::Operation) {
-        let inner = self.0.try_lock().unwrap();
-
-        if let Some(handle) = &*inner {
-            handle.operate(operation);
-        }
-    }
-
-    pub fn send_message(&self, msg: BarMessage<Msg>) {
-        let inner = self.0.try_lock().unwrap();
-
-        if let Some(handle) = &*inner {
-            handle.send_message(msg);
-        }
-    }
-}
-
-impl<Msg> Default for BarHandle<Msg> {
-    fn default() -> Self {
-        Self(Arc::default())
-    }
-}
-
-impl<Msg> WeakBarHandle<Msg> {
-    pub fn upgrade(&self) -> Option<BarHandle<Msg>> {
-        self.0.upgrade().map(|arc| BarHandle(arc))
-    }
-}
-
-pub struct Bar<Msg> {
-    handle: BarHandle<Msg>,
-    style: Style,
-    first: Arc<Mutex<Vec<Child<Msg>>>>,
-    center: Arc<Mutex<Vec<Child<Msg>>>>,
-    last: Arc<Mutex<Vec<Child<Msg>>>>,
-}
-
-impl<Msg> Bar<Msg>
-where
-    Msg: Clone + Send + 'static,
-{
-    fn process_children(handle: &BarHandle<Msg>, children: &mut Vec<Child<Msg>>) {
-        for c in children {
-            if let Some(mut emitter) = c.try_with_emitter() {
-                emitter.connect({
-                    let weak_handle = BarHandle::downgrade(handle);
-                    move |_: signal::RedrawNeeded| {
-                        let Some(handle) = weak_handle.upgrade() else {
-                            return HandlerPolicy::Discard;
-                        };
-
-                        handle.send_message(BarMessage::Empty);
-
-                        HandlerPolicy::Keep
-                    }
-                });
-
-                emitter.connect({
-                    let weak_handle = BarHandle::downgrade(handle);
-                    move |_: signal::RequestUnfocus| {
-                        let Some(handle) = weak_handle.upgrade() else {
-                            return HandlerPolicy::Discard;
-                        };
-
-                        handle.send_message(BarMessage::Operation(
-                            operation::Focusable::Unfocus.into(),
-                        ));
-
-                        HandlerPolicy::Keep
-                    }
-                });
-
-                emitter.connect({
-                    let weak_handle = BarHandle::downgrade(handle);
-                    move |signal::RequestFocus(id)| {
-                        let Some(handle) = weak_handle.upgrade() else {
-                            return HandlerPolicy::Discard;
-                        };
-
-                        handle.send_message(BarMessage::Operation(
-                            operation::Focusable::Focus(id).into(),
-                        ));
-
-                        HandlerPolicy::Keep
-                    }
-                });
-            }
-        }
-    }
-
-    pub fn new(
-        output: Option<OutputHandle>,
-        style: Style,
-        mut first: Vec<Child<Msg>>,
-        mut center: Vec<Child<Msg>>,
-        mut last: Vec<Child<Msg>>,
-    ) -> Self {
-        let mut restore_output = None;
-
-        let focused_output = pinnacle_api::output::get_focused();
-
-        if output.is_some() {
-            restore_output = focused_output.clone();
-        }
-
-        let output = output.or(focused_output).expect("Bar needs an output");
-        output.focus();
-
-        let handle = BarHandle::default();
-
-        Self::process_children(&handle, &mut first);
-        Self::process_children(&handle, &mut center);
-        Self::process_children(&handle, &mut last);
-
-        let mut bar = Self {
-            handle,
-            style,
-            first: Arc::new(Mutex::new(first)),
-            center: Arc::new(Mutex::new(center)),
-            last: Arc::new(Mutex::new(last)),
-        };
-
-        bar.show();
-
-        if let Some(output) = restore_output {
-            output.focus();
-        }
-
-        bar
-    }
-
-    pub fn show(&mut self) {
-        use snowcap_api::layer;
-
-        let total_dimension = (self.style.dimension
-            + self.style.padding.map(|p| p.top + p.bottom).unwrap_or(0.0))
-        .ceil();
-        let mut exclusive_dimension: u32 = total_dimension as u32;
-
-        if exclusive_dimension == 0 {
-            exclusive_dimension = 1;
-        }
-
-        let handle = BarHandle::downgrade(&self.handle);
-
-        let program = BarProgram::<Msg> {
-            handle,
-            style: self.style.clone(),
-            first: Arc::downgrade(&self.first),
-            center: Arc::downgrade(&self.center),
-            last: Arc::downgrade(&self.last),
-        };
-
-        self.handle.set(
-            layer::new_widget(
-                program,
-                Some(layer::Anchor::Top),
-                layer::KeyboardInteractivity::None,
-                layer::ExclusiveZone::Exclusive(NonZero::new(exclusive_dimension).unwrap()),
-                layer::ZLayer::Top,
-            )
-            .expect("Could not create Layer for bar"),
-        );
-
-        self.handle.on_key_event(|handle, event| {
-            use xkbcommon::xkb::Keysym;
-
-            if event.pressed && event.key == Keysym::Escape {
-                handle.send_message(BarMessage::Operation(operation::Focusable::Unfocus.into()));
-            }
-        });
-    }
-}
-
-pub struct BarBuilder<Msg> {
-    style: Style,
-    output: Option<pinnacle_api::output::OutputHandle>,
-    first: Vec<Child<Msg>>,
-    center: Vec<Child<Msg>>,
-    last: Vec<Child<Msg>>,
-}
-
-impl<Msg> BarBuilder<Msg>
-where
-    Msg: Clone + Send + 'static,
-{
-    pub fn new() -> BarBuilder<Msg> {
-        Self {
-            style: Style {
-                dimension: 24.,
-                padding: Some(Padding {
-                    top: 8.,
-                    right: 8.,
-                    bottom: 8.,
-                    left: 8.,
-                }),
-                background_color: Some(Color::rgba(0.15, 0.03, 0.1, 0.65)),
-                border: Some(Border {
-                    width: Some(0.0),
-                    ..Default::default()
-                }),
-                spacing: None,
-            },
-            output: None,
-            first: Vec::default(),
-            center: Vec::default(),
-            last: Vec::default(),
-        }
-    }
-
-    pub fn with_output(&mut self, output: pinnacle_api::output::OutputHandle) -> &mut Self {
-        self.output = Some(output);
-
-        self
-    }
-
-    pub fn with_style(&mut self, style: Style) -> &mut Self {
-        self.style = style;
-
-        self
-    }
-
-    pub fn with_dimension(&mut self, dimension: f32) -> &mut Self {
-        self.style.dimension = dimension;
-
-        self
-    }
-
-    pub fn with_padding(&mut self, padding: Padding) -> &mut Self {
-        self.style.padding = Some(padding);
-
-        self
-    }
-
-    pub fn with_background_color(&mut self, color: Color) -> &mut Self {
-        self.style.background_color = Some(color);
-
-        self
-    }
-
-    pub fn with_border(&mut self, border: Border) -> &mut Self {
-        self.style.border = Some(border);
-
-        self
-    }
-
-    pub fn with_spacing(&mut self, spacing: f32) -> &mut Self {
-        self.style.spacing = Some(spacing);
-
-        self
-    }
-
-    pub fn with_first(&mut self, children: Vec<Child<Msg>>) -> &mut Self {
-        self.first = children;
-
-        self
-    }
-
-    pub fn with_center(&mut self, children: Vec<Child<Msg>>) -> &mut Self {
-        self.center = children;
-
-        self
-    }
-
-    pub fn with_last(&mut self, children: Vec<Child<Msg>>) -> &mut Self {
-        self.last = children;
-
-        self
-    }
-
-    pub fn build(&mut self) -> Bar<Msg> {
-        let first = std::mem::take(&mut self.first);
-        let center = std::mem::take(&mut self.center);
-        let last = std::mem::take(&mut self.last);
-
-        Bar::new(self.output.clone(), self.style.clone(), first, center, last)
-    }
-}
-
-impl<Msg> Default for BarBuilder<Msg>
-where
-    Msg: Clone + Send + 'static,
-{
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-pub fn builder<Msg>() -> BarBuilder<Msg>
-where
-    Msg: Clone + Send + 'static,
-{
-    BarBuilder::new()
 }
