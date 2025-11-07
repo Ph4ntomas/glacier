@@ -157,25 +157,34 @@ where
             _output: output,
         });
 
-        let weak_state = state.downgrade();
+        let list = Self { state };
+        let weak = list.downgrade();
 
         pinnacle_api::tag::connect_signal(TagSignal::Active(Box::new(move |handle, active| {
-            let Some(state) = weak_state.upgrade() else {
+            let Some(list) = weak.upgrade() else {
                 return;
             };
 
-            let mut inner = state.0.lock().unwrap();
+            let mut redraw = false;
 
-            for tag in inner.tags.iter_mut() {
-                if &tag.handle == handle {
-                    tag.active = active;
-                    inner.emit(signal::RedrawNeeded);
-                    return;
+            {
+                let mut inner = list.state.0.lock().unwrap();
+
+                for tag in inner.tags.iter_mut() {
+                    if &tag.handle == handle {
+                        tag.active = active;
+                        redraw = true;
+                        break;
+                    }
                 }
+            }
+
+            if redraw {
+                list.emit(signal::RedrawNeeded);
             }
         })));
 
-        Self { state }
+        list
     }
 
     pub fn style(self, style: Style) -> Self {
