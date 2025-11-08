@@ -5,6 +5,7 @@ pub mod signal;
 pub mod util;
 pub mod widget;
 
+/// Miscellaneous modules
 pub mod misc {
     pub mod color;
     pub mod image;
