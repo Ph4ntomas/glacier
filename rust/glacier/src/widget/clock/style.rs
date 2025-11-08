@@ -1,5 +1,12 @@
+//! [`Clock`] style.
+//!
+//! [`Clock`]: super::Clock
+
 use snowcap_api::widget::{Border, Color, Padding, container, font::Font, text};
 
+/// Appearance of a [`Clock`].
+///
+/// [`Clock`]: super::Clock
 #[derive(Clone, Default)]
 pub struct Style {
     pub bg_color: Option<Color>,
@@ -11,10 +18,12 @@ pub struct Style {
 }
 
 impl Style {
+    /// Create a new [`Style`] with default value.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Sets the background [`Color`].
     pub fn bg_color(self, bg_color: Color) -> Self {
         Self {
             bg_color: Some(bg_color),
@@ -22,6 +31,7 @@ impl Style {
         }
     }
 
+    /// Sets the text [`Color`].
     pub fn fg_color(self, fg_color: Color) -> Self {
         Self {
             fg_color: Some(fg_color),
@@ -29,6 +39,7 @@ impl Style {
         }
     }
 
+    /// Sets the font size, in pixels
     pub fn pixels(self, pixels: f32) -> Self {
         Self {
             pixels: Some(pixels),
@@ -36,6 +47,7 @@ impl Style {
         }
     }
 
+    /// Sets the [`Font`] used to render text.
     pub fn font(self, font: Font) -> Self {
         Self {
             font: Some(font),
@@ -43,6 +55,7 @@ impl Style {
         }
     }
 
+    /// Sets [`Padding`] for the container surrounding the text.
     pub fn padding(self, padding: Padding) -> Self {
         Self {
             padding: Some(padding),
@@ -50,6 +63,7 @@ impl Style {
         }
     }
 
+    /// Sets the [`Border`] of the container surrounding the text.
     pub fn border(self, border: Border) -> Self {
         Self {
             border: Some(border),

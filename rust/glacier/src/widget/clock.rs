@@ -1,3 +1,9 @@
+//! Simple clock widget
+//!
+//! [`Clock`] are a simple timer based widget which displays date and time.
+//!
+//! The [`format`] function accept a string using `strftime` format.
+
 use std::{fmt::Display, time::Duration};
 
 use chrono::{Local, TimeZone, Utc};
@@ -10,13 +16,17 @@ use crate::{
 };
 
 pub mod style;
-use style::Style;
+#[doc(inline)]
+pub use style::Style;
 
+/// [`Clock`] using the local [`TimeZone`].
 pub type LocalClock<Msg> = Clock<Msg, Local>;
+/// [`Clock`] using the UTC [`TimeZone`].
 pub type UtcClock<Msg> = Clock<Msg, Local>;
 
 type ViewCallback<Msg> = Box<dyn Fn(String, Style) -> Option<WidgetDef<Msg>> + Sync + Send>;
 
+/// Clock internal state.
 pub struct Inner<Msg, Tz> {
     base: WidgetBase,
     format: String,
@@ -26,13 +36,16 @@ pub struct Inner<Msg, Tz> {
     refresh_timer: Timer,
 }
 
+/// Clock widget.
 #[derive(Clone)]
 pub struct Clock<Msg, Tz> {
     state: State<Inner<Msg, Tz>>,
 }
 
+/// Non-owning [`Clock`].
 pub struct WeakClock<Msg, Tz>(WeakState<Inner<Msg, Tz>>);
 
+/// Default [`Clock`] appearance.
 pub fn default_style() -> Style {
     Style::new()
 }
@@ -45,6 +58,7 @@ where
     const DEFAULT_REFRESH: Duration = Duration::from_secs(30);
     const DEFAULT_FORMAT: &'static str = "%a. %d %b %H:%M";
 
+    /// Build a [`Clock`] with a specific [`TimeZone`]
     pub fn from_timezone(tz: Tz) -> Self {
         let mut timer = Timer::new(Self::DEFAULT_REFRESH);
 
@@ -75,6 +89,7 @@ where
         ret
     }
 
+    /// Sets the [`Clock`] refresh rate.
     pub fn refresh(self, refresh: Duration) -> Self {
         {
             let mut inner = self.state.0.lock().unwrap();
@@ -85,17 +100,20 @@ where
         self
     }
 
+    /// Sets the [`Clock`] format string.
     pub fn format(self, format: impl Into<String>) -> Self {
         self.state.0.lock().unwrap().format = format.into();
         self.emit(signal::RedrawNeeded);
         self
     }
 
+    /// Sets the [`Clock`] style.
     pub fn style(self, style: Style) -> Self {
         self.state.0.lock().unwrap().style = style;
         self
     }
 
+    /// Sets the [`Clock`] view function.
     pub fn view_callback<F>(self, callback: F) -> Self
     where
         F: Fn(String, Style) -> Option<WidgetDef<Msg>> + Send + Sync + 'static,
@@ -104,12 +122,14 @@ where
         self
     }
 
+    /// Create a new [`WeakClock`] referring to this [`Clock`]
     pub fn downgrade(&self) -> WeakClock<Msg, Tz> {
         WeakClock(self.state.downgrade())
     }
 }
 
 impl<Msg, Tz> Clock<Msg, Tz> {
+    /// [`Clock`] default view function.
     pub fn default_view(content: String, mut style: Style) -> Option<WidgetDef<Msg>> {
         let content = Text::new(content)
             .height(widget::Length::Fill)
@@ -135,6 +155,7 @@ impl<Msg> Clock<Msg, Local>
 where
     Msg: Send + Sync + 'static,
 {
+    /// Create a new [`Clock`] using the local [`TimeZone`]
     pub fn new() -> Self {
         Clock::from_timezone(Local)
     }
@@ -144,12 +165,16 @@ impl<Msg> Clock<Msg, Utc>
 where
     Msg: Send + Sync + 'static,
 {
+    /// Create a new [`Clock`] using UTC [`TimeZone`]
     pub fn new() -> Self {
         Clock::from_timezone(Utc)
     }
 }
 
 impl<Msg, Tz> WeakClock<Msg, Tz> {
+    /// Attempts to upgrade this `WeakClock` to a [`Clock`].
+    ///
+    /// Returs [`None`] if the `Clock` has already been dropped.
     pub fn upgrade(&self) -> Option<Clock<Msg, Tz>> {
         self.0.upgrade().map(|state| Clock { state })
     }
