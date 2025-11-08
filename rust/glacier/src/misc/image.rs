@@ -1,17 +1,32 @@
+//! Image handling module.
+
 use snowcap_api::widget::{
     Color,
     image::{self},
 };
 
+/// Utility type to create snowcap [`Image`]s from a mask of alpha value.
+///
+/// The mask is defined from an array of u8, where 0 represents full transparency.
+/// It's possible to assign a default [`Color`] to the mask, which will be used if no [`Color`] is
+/// passed to the `to_*` functions.
+///
+/// [`From`] implementations uses the default color to create the [`Image`] or [`image::Handle`].
+///
+/// When converting an [`AlphaMask`] to an image, the [`Color::alpha`] component is multiplied by
+/// the one in the mask, while the color component are taken as-is.
+///
+/// [`Image`]: image::Image
 #[derive(Clone)]
 pub struct AlphaMask {
-    pub width: usize,
-    pub height: usize,
-    pub color: Option<Color>,
-    pub mask: Vec<u8>,
+    width: usize,
+    height: usize,
+    color: Option<Color>,
+    mask: Vec<u8>,
 }
 
 impl AlphaMask {
+    /// Create a new [`AlphaMask`]
     pub fn new<I, V>(width: usize, height: usize, mask: I) -> Self
     where
         I: IntoIterator<Item = V>,
@@ -35,6 +50,7 @@ impl AlphaMask {
         }
     }
 
+    /// Sets default color for this [`AlphaMask`]
     pub fn color(self, color: Color) -> Self {
         Self {
             color: Some(color),
@@ -42,6 +58,7 @@ impl AlphaMask {
         }
     }
 
+    /// Create a new [`AlphaMask`] by inverting every byte.
     pub fn invert(&self) -> Self {
         let Self {
             width,
@@ -60,6 +77,9 @@ impl AlphaMask {
         }
     }
 
+    /// Create an [`image::Handle`] from this [`AlphaMask`].
+    ///
+    /// If `color` is set, use this instead of the default color.
     pub fn to_image_handle(&self, color: Option<Color>) -> image::Handle {
         let color = color.or(self.color).unwrap_or(Color::rgb(0.0, 0.0, 0.0));
 
@@ -80,7 +100,34 @@ impl AlphaMask {
         }
     }
 
+    /// Create an [`image::Image`] from this [`AlphaMask`].
+    ///
+    /// If `color` is set, use this instead of the default color.
     pub fn to_image(&self, color: Option<Color>) -> image::Image {
         image::Image::new(self.to_image_handle(color))
+    }
+}
+
+impl From<AlphaMask> for image::Handle {
+    fn from(value: AlphaMask) -> Self {
+        value.to_image_handle(None)
+    }
+}
+
+impl From<&AlphaMask> for image::Handle {
+    fn from(value: &AlphaMask) -> Self {
+        value.to_image_handle(None)
+    }
+}
+
+impl From<AlphaMask> for image::Image {
+    fn from(value: AlphaMask) -> Self {
+        value.to_image(None)
+    }
+}
+
+impl From<&AlphaMask> for image::Image {
+    fn from(value: &AlphaMask) -> Self {
+        value.to_image(None)
     }
 }
