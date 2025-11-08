@@ -1,3 +1,19 @@
+//! TagList widget.
+//!
+//! [`TagList`] allows to display tags, and control them using the mouse. When the view function is
+//! called, this widget first render each [`Tag`], wrapping the result in a [`MouseArea`] which
+//! will handle left and right click to switch and toggle the given tag, respectively. This first
+//! render pass can be overriden through the use of the [`tag_view_callback`] attribute, and
+//! default to calling [`TagList::default_tag_view`].
+//!
+//! The resulting views are then passed to another function with should render the list itself,
+//! whose resulting view will be wrapped in a second `MouseArea`, handing Scroll events. This
+//! second render pass can be overriden via the [`list_view_callback`] attribute, and default to
+//! calling [`TagList::default_list_view`].
+//!
+//! [`tag_view_callback`]: TagList::tag_view_callback
+//! [`list_view_callback`]: TagList::list_view_callback
+
 use std::time::{Duration, Instant};
 
 use pinnacle_api::signal::TagSignal;
@@ -17,12 +33,14 @@ use crate::{
 };
 
 pub mod style;
-pub use style::{Style, TagStyle};
+#[doc(inline)]
+pub use style::{Style, TagStyle, brighten_background};
 
 type TagViewCallback<Msg> = Box<dyn Fn(&Tag, TagStyle) -> Option<WidgetDef<Msg>> + Send + Sync>;
 type ListViewCallback<Msg> =
     Box<dyn Fn(Vec<WidgetDef<Msg>>, Style) -> Option<WidgetDef<Msg>> + Send + Sync>;
 
+/// [`TagList`] actions.
 #[derive(Clone, Debug)]
 pub enum Action {
     Toggle(TagHandle),
@@ -34,15 +52,22 @@ pub enum Action {
     SmallScroll,
 }
 
+/// [`TagList`] messages type.
 pub type Message = message::Message<Action>;
 
+/// Single Tag state.
 pub struct Tag {
-    handle: TagHandle,
-    name: String,
-    active: bool,
-    hovered: bool,
+    /// Handle to the tag.
+    pub handle: TagHandle,
+    /// Name of the tag.
+    pub name: String,
+    /// Whether the tag is currently active.
+    pub active: bool,
+    /// Whether the tag [`MouseArea`] is hovered.
+    pub hovered: bool,
 }
 
+/// Internal [`TagList`] stste.
 pub struct Inner<Msg> {
     base: WidgetBase,
     tags: Vec<Tag>,
@@ -55,14 +80,17 @@ pub struct Inner<Msg> {
     _output: OutputHandle,
 }
 
+/// Widget representing a list of Tags.
 #[derive(Clone)]
 pub struct TagList<Msg> {
     state: State<Inner<Msg>>,
 }
 
+/// Non-owning version of the [`TagList`].
 #[derive(Clone)]
 pub struct WeakTagList<Msg>(WeakState<Inner<Msg>>);
 
+/// Default [`TagList`] appearance.
 pub fn default_style() -> Style {
     use snowcap_api::widget::{
         Border, Padding,
@@ -91,37 +119,6 @@ pub fn default_style() -> Style {
         .inactive(TagStyle::new().bg_color(color::from_hex("#666666")))
 }
 
-pub fn brighten_background(amount: f32) -> impl Fn(TagStyle) -> TagStyle {
-    use snowcap_api::widget::Color;
-    move |style| {
-        let color = if let Some(Color {
-            red,
-            green,
-            blue,
-            alpha,
-        }) = style.bg_color
-        {
-            let red = (red * amount).clamp(1.0, 1.0);
-            let green = (green * amount).clamp(1.0, 1.0);
-            let blue = (blue * amount).clamp(1.0, 1.0);
-
-            Some(Color {
-                red,
-                green,
-                blue,
-                alpha,
-            })
-        } else {
-            None
-        };
-
-        TagStyle {
-            bg_color: color,
-            ..style
-        }
-    }
-}
-
 fn get_all_tags(output: OutputHandle) -> impl Iterator<Item = Tag> {
     output.tags().batch_map(|tag| {
         Box::pin(async {
@@ -140,6 +137,7 @@ where
 {
     const DEFAULT_THROTTLE: Duration = Duration::from_millis(50);
 
+    /// Create a new [`TagList`] for a given [`OutputHandle`].
     pub fn new(output: OutputHandle) -> Self {
         let tags = get_all_tags(output.clone()).collect();
         let base = WidgetBase::new("TagList");
@@ -187,12 +185,14 @@ where
         list
     }
 
+    /// Sets the [`Style`].
     pub fn style(self, style: Style) -> Self {
         self.state.0.lock().unwrap().style = style;
         self.emit(signal::RedrawNeeded);
         self
     }
 
+    /// Sets the callback to render a single [`Tag`].
     pub fn tag_view_callback<F>(self, callback: F) -> Self
     where
         F: Fn(&Tag, TagStyle) -> Option<WidgetDef<Msg>> + Send + Sync + 'static,
@@ -202,6 +202,7 @@ where
         self
     }
 
+    /// Sets the callback to render the full list.
     pub fn list_view_callback<F>(self, callback: F) -> Self
     where
         F: Fn(Vec<WidgetDef<Msg>>, Style) -> Option<WidgetDef<Msg>> + Send + Sync + 'static,
@@ -211,15 +212,18 @@ where
         self
     }
 
+    /// Sets the cooldown time between two Scroll events.
     pub fn throttle_scroll(self, throttle: Duration) -> Self {
         self.state.0.lock().unwrap().throttle_scroll = throttle;
         self
     }
 
+    /// Create a new [`WeakTagList`] for this `TagList`.
     pub fn downgrade(&self) -> WeakTagList<Msg> {
         WeakTagList(self.state.downgrade())
     }
 
+    /// Default view to render [`Tag`].
     pub fn default_tag_view(tag: &Tag, style: TagStyle) -> Option<WidgetDef<Msg>> {
         let text = Text::new(tag.name.clone())
             .height(snowcap_api::widget::Length::Fill)
@@ -233,6 +237,7 @@ where
         Some(widget.into())
     }
 
+    /// Default view to render a list of [`Tag`].
     pub fn default_list_view(
         children: Vec<WidgetDef<Msg>>,
         style: Style,
@@ -248,22 +253,11 @@ where
 }
 
 impl<Msg> WeakTagList<Msg> {
+    /// Attempts to upgrade this `WeakTagList` to a [`TagList`].
+    ///
+    /// Returns [`None`] if the [`TagList`] has already been dropped.
     pub fn upgrade(&self) -> Option<TagList<Msg>> {
         self.0.upgrade().map(|state| TagList { state })
-    }
-}
-
-impl<Msg> WithEmitter for TagList<Msg> {
-    fn with_emitter(&self) -> crate::signal::Emitter {
-        self.state.0.lock().unwrap().with_emitter()
-    }
-}
-
-impl<Msg> WithState for TagList<Msg> {
-    type Type = Inner<Msg>;
-
-    fn with_state(&self) -> State<Self::Type> {
-        self.state.clone()
     }
 }
 
@@ -367,6 +361,20 @@ where
         } else {
             builder.small_scroll().into()
         }
+    }
+}
+
+impl<Msg> WithEmitter for TagList<Msg> {
+    fn with_emitter(&self) -> crate::signal::Emitter {
+        self.state.0.lock().unwrap().with_emitter()
+    }
+}
+
+impl<Msg> WithState for TagList<Msg> {
+    type Type = Inner<Msg>;
+
+    fn with_state(&self) -> State<Self::Type> {
+        self.state.clone()
     }
 }
 
