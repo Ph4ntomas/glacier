@@ -14,6 +14,11 @@
 //! Built-in [`Widget`] all implements the [`WithState`] trait, and internally uses
 //! [`WidgetMessage`]. As such, when using built-in widget, you should implement
 //! [`From<WidgetMessage>`] and [`Into<Option<WidgetMessage>>`] on your message type.
+//!
+//! Built-in [`Widget`] rendering function can be overridden. All built-in expose their default
+//! function, which can be used from the overriding callback if you want to customize something
+//! around the widget, instead of the widget itself. The widget module contains a public
+//! `default_style()` function in case you want to tweak that instead of writing one from scratch.
 
 use std::sync::{Arc, Mutex, Weak};
 
@@ -32,9 +37,13 @@ pub mod prompt;
 pub mod taglist;
 pub mod textbox;
 
+#[doc(inline)]
 pub use clock::{Clock, LocalClock};
+#[doc(inline)]
 pub use prompt::Prompt;
+#[doc(inline)]
 pub use taglist::TagList;
+#[doc(inline)]
 pub use textbox::TextBox;
 
 /// Message used by built-in widgets.

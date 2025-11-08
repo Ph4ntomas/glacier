@@ -1,7 +1,10 @@
+//! Common widget base.
+
 use std::{fmt::Display, sync::atomic::AtomicU32};
 
 use crate::signal::{Emitter, WithEmitter};
 
+/// Building block shared between all built-in widgets.
 pub struct WidgetBase {
     widget_type: String,
     id: u32,
@@ -10,11 +13,12 @@ pub struct WidgetBase {
 
 static COUNT: AtomicU32 = AtomicU32::new(0);
 
-pub fn next_id() -> u32 {
+fn next_id() -> u32 {
     COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 impl WidgetBase {
+    /// Create a new widget base, with a given type.
     pub fn new(widget_type: impl Into<String>) -> Self {
         Self {
             widget_type: widget_type.into(),
@@ -23,6 +27,7 @@ impl WidgetBase {
         }
     }
 
+    /// Get the widget base Id.
     pub fn id(&self) -> u32 {
         self.id
     }
