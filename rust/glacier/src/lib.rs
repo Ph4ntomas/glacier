@@ -12,5 +12,14 @@ pub mod misc {
     pub mod separator;
 }
 
+#[doc(inline)]
 pub use keygrabber::KeyGrabber;
+
+#[doc(inline)]
 pub use misc::color;
+
+#[doc(inline)]
+pub use modal::modal;
+
+#[doc(inline)]
+pub use bar::Bar;
