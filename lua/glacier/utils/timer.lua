@@ -156,8 +156,8 @@ function Timer:disconnect_all()
 end
 
 ---Timer configuration.
----@class glacier.timer.Config
----@field timeout? number Timeout in second between events.
+---@class (exact) glacier.timer.Config
+---@field interval? number Timeout in second between events.
 ---@field once? boolean If true, the timer will act as a simple delay.
 ---@field callback? fun() Callback to run on timeout.
 
@@ -174,7 +174,7 @@ function Timer:new(config)
     local ret = { ---@diagnostic disable-line:redefined-local
         inner = {
             signals = signal_table(),
-            interval = config.timeout or 1.0,
+            interval = config.interval or 1.0,
             once = config.once,
             callback = config.callback,
         },
@@ -202,12 +202,12 @@ end
 ---
 ---The timer is started before being returned by this function.
 ---
----@param timeout number How long to wait before running `function`
 ---@param callback fun(timer) Function to call when the internal timer expires.
+---@param timeout number How long to wait before running `function`
 ---@return glacier.timer.Timer
-function timer.once(timeout, callback)
+function timer.once(callback, timeout)
     local ret = Timer:new({
-        timeout = timeout or 0.0,
+        interval = timeout or 0.0,
         callback = callback,
         once = true,
     })
