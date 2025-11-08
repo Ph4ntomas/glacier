@@ -1,9 +1,13 @@
+//! Pre-made separators.
+
+/// Arrows shapes
 pub mod arrow {
     use crate::misc::image::AlphaMask;
 
     const B: u8 = 255;
     const L: u8 = 0;
 
+    /// Right pointing arrow
     pub fn right() -> AlphaMask {
         #[rustfmt::skip]
         let mask = [
@@ -46,6 +50,7 @@ pub mod arrow {
         AlphaMask::new(20, 34, mask)
     }
 
+    /// Transparent right pointing arrow.
     pub fn right_inv() -> AlphaMask {
         #[rustfmt::skip]
         let mask = [
@@ -88,6 +93,7 @@ pub mod arrow {
         AlphaMask::new(20, 34, mask)
     }
 
+    /// Left pointing arrow.
     pub fn left() -> AlphaMask {
         #[rustfmt::skip]
         let mask = [
@@ -130,6 +136,7 @@ pub mod arrow {
         AlphaMask::new(20, 34, mask)
     }
 
+    /// Left pointing transparent arrow.
     pub fn left_inv() -> AlphaMask {
         #[rustfmt::skip]
         let mask = [
