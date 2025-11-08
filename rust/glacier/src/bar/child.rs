@@ -1,32 +1,39 @@
+//! Bar children.
 use snowcap_api::widget::WidgetDef;
 
 use crate::{
     signal::TryWithEmitter,
-    widget::{Widget, WithState},
+    widget::{Functional, Widget, WithState},
 };
 
 use super::BarMessage;
 
+/// Bar child.
+///
+/// [`Child`] holds either a view callback, or a full fledge stateful [`Widget`].
+///
+/// The preferred way to construct [`Child`] is through the use of the [`children`] macro, which
+/// accept any type that can be turned into a `Child` via the [`Into<Child>`] traits. Blankets
+/// implementation are provided for type implementing [`WithState`].
 pub enum Child<Msg> {
+    /// Functional-style stateless widget.
     Functional(Box<dyn Fn() -> WidgetDef<BarMessage<Msg>> + Sync + Send + 'static>),
+    /// Stateful widgets.
     Widget(Box<dyn Widget<Message = BarMessage<Msg>> + Sync + Send + 'static>),
 }
-
-/// Disambiguisation marker for functional-style children.
-pub struct Functional<F, Msg>(pub F)
-where
-    F: Fn() -> WidgetDef<BarMessage<Msg>> + Sync + Send + 'static;
 
 impl<Msg> Child<Msg>
 where
     Msg: Clone,
 {
+    /// Calls update on stateful widgets.
     fn update_inner(&mut self, msg: BarMessage<Msg>) {
         if let Self::Widget(w) = self {
             w.update(msg)
         }
     }
 
+    /// Render the contained [`Widget`].
     pub(crate) fn view(&self) -> Option<snowcap_api::widget::WidgetDef<BarMessage<Msg>>> {
         match self {
             Self::Functional(cb) => Some(cb()),
@@ -34,6 +41,7 @@ where
         }
     }
 
+    /// Update held [`Widget`].
     pub(crate) fn update(&mut self, msg: BarMessage<Msg>) {
         match msg {
             BarMessage::Empty => {}
@@ -61,18 +69,27 @@ where
     }
 }
 
-impl<F, Msg> From<Functional<F, Msg>> for Child<Msg>
+impl<F, Msg> From<Functional<F, BarMessage<Msg>>> for Child<Msg>
 where
     F: Fn() -> WidgetDef<BarMessage<Msg>> + Sync + Send + 'static,
 {
-    fn from(value: Functional<F, Msg>) -> Self {
+    fn from(value: Functional<F, BarMessage<Msg>>) -> Self {
         Self::Functional(Box::new(value.0))
     }
 }
 
+/// Create a [`Vec`] of [`Child`].
+///
+/// `children!` allows to create a `Vec` of `Child` from disjointed types, with the same syntax as
+/// array expressions.
+///
+/// It supports all elements which implement [`Into<Child>`].
 #[macro_export]
 macro_rules! children {
-    ($($child:expr), *) => [
+    () => [
+        std::vec::Vec::new()
+    ];
+    ($($child:expr),+ $(,)?) => [
         vec![
             $($child.into()),*
         ]

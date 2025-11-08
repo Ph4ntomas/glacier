@@ -1,3 +1,39 @@
+//! Glacier's bar.
+//!
+//! The [`Bar`] is split into 3 area, referred to as `first`, `center` and `last`. By default, the
+//! bar sits on top of the screen, and render each area left to right, with the following rules:
+//!  - first: the area shrink to fit its content, which is left-aligned.
+//!  - center: The area fill the remaining space. Its content is left aligned.
+//!  - right: The area shrink to fit its content, which is right-aligned.
+//! ```text
+//!  -------------------------------------------------------
+//!  | first    |             center             |    last |
+//!  -------------------------------------------------------
+//! ```
+//!
+//! When a new view is needed, the bar starts by calling the view function for each of its children,
+//! filtering out children whose view is [`None`]. It then render each areas calling their view
+//! function, passing both the children for this area and the [`Bar`]'s [`Style`]. The three
+//! resulting views are put in a container spanning the whole screen.
+//!
+//! # Widgets
+//! [`Bar`] widgets can be stateful object implementing [`Widget`], or stateless [`Functional`]
+//! widgets. They are internally stored as [`Vec`] of [`Child`].
+//!
+//! If a `Widget` implement [`WithEmitter`], `Bar` instance will register themselves to the
+//! following signals:
+//! - [`RedrawNeeded`]: Trigger a re-render. Useful if the `Widget` state changed externally.
+//! - [`RequestFocus`]: Request keyboard focus on the bar, and request the server to focus a given
+//!   widget.
+//! - [`RequestUnfocus`]: Remove the focus from the bar.
+//!
+//! [`Widget`]: crate::widget::Widget
+//! [`Functional`]: crate::widget::Functional
+//! [`RedrawNeeded`]: crate::widget::signal::RedrawNeeded
+//! [`RequestUnfocus`]: crate::widget::signal::RequestUnfocus
+//! [`RequestFocus`]: crate::widget::signal::RequestFocus
+//! [`WithEmitter`]: crate::signal::WithEmitter
+
 use std::{
     num::NonZero,
     sync::{Arc, Mutex, Weak},
@@ -16,17 +52,26 @@ use crate::{
 };
 
 pub mod style;
+#[doc(inline)]
 pub use style::Style;
 
 mod child;
-use child::Child;
+pub use child::Child;
 pub use child::children;
 
+/// Message used by [`Bar`]s.
+///
+/// `Bar`'s `Msg` parameter should be convertible to this type by using the [`BarMessage::Custom`]
+/// enum.
 #[derive(Clone)]
 pub enum BarMessage<Msg> {
+    /// Empty message. Only triggers a redraw.
     Empty,
+    /// Message targeted at the bar itself.
     Operation(operation::Operation),
+    /// Built-in `Widget` messages.
     BuiltinWidget(WidgetMessage),
+    /// Custom messages for user-defined widgets.
     Custom(Msg),
 }
 
@@ -34,7 +79,8 @@ type BarWidgetDef<Msg> = WidgetDef<BarMessage<Msg>>;
 type ViewCallback<Msg> =
     Box<dyn Fn(Vec<BarWidgetDef<Msg>>, &Style) -> BarWidgetDef<Msg> + Send + Sync>;
 
-pub struct Inner<Msg> {
+/// Bar internals.
+struct Inner<Msg> {
     style: Style,
     first: Arc<Mutex<Vec<Child<Msg>>>>,
     center: Arc<Mutex<Vec<Child<Msg>>>>,
@@ -46,15 +92,25 @@ pub struct Inner<Msg> {
     handle: Option<LayerHandle<BarMessage<Msg>>>,
 }
 
-pub struct BarProgram<Msg>(WeakBar<Msg>);
+/// Bar layer's program.
+struct BarProgram<Msg>(WeakBar<Msg>);
 
+/// Glacier's bar.
+///
+/// See module level [documentation].
+///
+/// [documentation]: crate::bar
 pub struct Bar<Msg> {
     state: Arc<Mutex<Inner<Msg>>>,
 }
 
+/// Non owning [`Bar`] handle.
 #[derive(Clone)]
 pub struct WeakBar<Msg>(Weak<Mutex<Inner<Msg>>>);
 
+/// [`Bar`]'s default style.
+///
+/// This is different from [`Style::default()`].
 pub fn default_style() -> Style {
     Style::new()
         .pixels(24.)
@@ -66,6 +122,7 @@ impl<Msg> Bar<Msg>
 where
     Msg: Clone + Send + 'static,
 {
+    /// Create a new `Bar`.
     pub fn new() -> Self {
         let inner = Inner {
             style: default_style(),
@@ -83,6 +140,9 @@ where
         }
     }
 
+    /// Set the bar [`Style`].
+    ///
+    /// This function triggers a re-render if the bar is already showned.
     pub fn style(self, style: Style) -> Self {
         self.state.lock().unwrap().style = style;
         if let Some(handle) = self.get_layer() {
@@ -91,24 +151,28 @@ where
         self
     }
 
+    /// Sets the children in the first area of the [`Bar`].
     pub fn first(self, children: Vec<Child<Msg>>) -> Self {
         let children = self.process_children(children);
         *self.state.lock().unwrap().first.lock().unwrap() = children;
         self
     }
 
+    /// Sets the children in the center area of the [`Bar`].
     pub fn center(self, children: Vec<Child<Msg>>) -> Self {
         let children = self.process_children(children);
         *self.state.lock().unwrap().center.lock().unwrap() = children;
         self
     }
 
+    /// Sets the children in the last area of the [`Bar`].
     pub fn last(self, children: Vec<Child<Msg>>) -> Self {
         let children = self.process_children(children);
         *self.state.lock().unwrap().last.lock().unwrap() = children;
         self
     }
 
+    /// Create a new layer for this [`Bar`], for a specific output.
     pub fn show(self, output: Option<OutputHandle>) -> Self {
         let mut restore_output = None;
         let focused_output = pinnacle_api::output::get_focused();
@@ -149,16 +213,19 @@ where
         self
     }
 
+    /// Destroy the [`Bar`] associated layer.
     pub fn close(self) {
         if let Some(handle) = self.state.lock().unwrap().handle.take() {
             handle.close();
         }
     }
 
+    /// Create a [`WeakBar`] pointing to this [`Bar`].
     pub fn downgrade(&self) -> WeakBar<Msg> {
         WeakBar(Arc::downgrade(&self.state))
     }
 
+    /// Request keyboard focus for this [`Bar`].
     pub fn focus(&self) {
         if let Some(handle) = self.get_layer() {
             let _ = handle
@@ -166,6 +233,7 @@ where
         }
     }
 
+    /// Remove keyboard focus for the [`Bar`].
     pub fn unfocus(&self) {
         if let Some(handle) = self.get_layer() {
             let _ =
@@ -248,6 +316,7 @@ where
             .collect()
     }
 
+    /// Default view function for the first area.
     pub fn default_first_view(
         children: Vec<BarWidgetDef<Msg>>,
         style: &Style,
@@ -262,6 +331,7 @@ where
         row.into()
     }
 
+    /// Default view function for the middle area.
     pub fn default_center_view(
         children: Vec<BarWidgetDef<Msg>>,
         style: &Style,
@@ -276,6 +346,7 @@ where
         row.into()
     }
 
+    /// Default view function for the last area.
     pub fn default_last_view(children: Vec<BarWidgetDef<Msg>>, style: &Style) -> BarWidgetDef<Msg> {
         let spacing = style.get_last_spacing();
         let mut row = Row::new_with_children(children)
@@ -289,6 +360,9 @@ where
 }
 
 impl<Msg> WeakBar<Msg> {
+    /// Attempts to upgrade to an owning [`Bar`].
+    ///
+    /// Returns [`None`] if the `Bar` has been dropped.
     pub fn upgrade(&self) -> Option<Bar<Msg>> {
         self.0.upgrade().map(|state| Bar { state })
     }
