@@ -1,4 +1,4 @@
-local signal_table = require("glacier.signal.signal_table")
+local signal = require("glacier.signal")
 
 local widget_signal = require("glacier.widget.signal")
 
@@ -8,7 +8,7 @@ local widget_signal = require("glacier.widget.signal")
 ---rendering, updating and printing the widget.
 ---@class glacier.widget.Base: glacier.bar.Child
 ---@field type string Type of widget.
----@field private signals glacier.signal.SignalTable
+---@field private signals glacier.signal.Emitter
 ---@field private widget_id integer
 local Base = {
     type = "Base",
@@ -105,7 +105,7 @@ function Base:super(o)
     o = o or {}
 
     o.widget_id = next_id()
-    o.signals = signal_table()
+    o.signals = signal.emitter()
 
     setmetatable(o, self)
     self.__tostring = self.__tostring -- Why ? No clue, but it won't work otherwise.

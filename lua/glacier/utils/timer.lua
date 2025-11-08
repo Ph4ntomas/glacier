@@ -1,7 +1,7 @@
 local cprom = require("cqueues.promise") --[[@as cqueues.promiselib]]
 
 local event_loop = require("glacier.internals.event_loop")
-local signal_table = require("glacier.signal.signal_table")
+local signal = require("glacier.signal")
 
 ---glacier.timer module
 ---
@@ -42,7 +42,7 @@ end
 ---
 ---@package
 ---@class glacier.timer.Inner
----@field signals glacier.signal.SignalTable
+---@field signals glacier.signal.Emitter
 ---@field promise cqueues.promise|nil Promise to control the timer.
 ---@field interval number Amount of time between events.
 ---@field once boolean If true, this timer stop itself after timing out.
@@ -138,7 +138,8 @@ end
 
 ---Emit a signal.
 ---
----@param
+---@param name string Signal to emit
+---@param ... any Signals parameters
 function Timer:emit(name, ...)
     return self.inner.signals:emit(name, self, ...)
 end
@@ -173,7 +174,7 @@ function Timer:new(config)
     ---@type glacier.timer.Timer
     local ret = { ---@diagnostic disable-line:redefined-local
         inner = {
-            signals = signal_table(),
+            signals = signal.emitter(),
             interval = config.interval or 1.0,
             once = config.once,
             callback = config.callback,

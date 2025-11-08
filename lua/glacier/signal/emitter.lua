@@ -1,9 +1,26 @@
 local Log = require("pinnacle.log")
 
+---`glacier.signal.emitter` module.
+---
+---This is an internal moduel. See `glacier.signal` for the actual documentation.
+---
+---@class glacier.signal.emitter
+local emitter = {}
+
+---@enum glacier.signal.HandlerPolicy
+---| 'Keep' # Keep the handler
+---| 'Discard' # Discard the handler.
+emitter.HandlerPolicy = {
+    ---Keep the handler
+    Keep = false,
+    ---Discard the handler
+    Discard = true,
+}
+
 ---Store a callback.
 ---@class glacier.signal.SignalCallback
 ---@field id integer
----@field callback fun(...): boolean?
+---@field callback fun(...): glacier.signal.HandlerPolicy?
 
 ---Handle to a signal callback.
 ---@class glacier.signal.SignalHandle
@@ -11,7 +28,7 @@ local Log = require("pinnacle.log")
 ---@field private entry? glacier.signal.SignalEntry
 local SignalHandle = {}
 
---- Disconnect the callback managed by this handle
+---Disconnect the callback managed by this handle
 function SignalHandle:disconnect()
     if self.entry and self.callback then
         self.entry:remove_callback(self.callback)
@@ -116,7 +133,7 @@ function SignalEntry:emit(...)
     for _, callback in pairs(self.signals) do
         local ok, ret = pcall(callback.callback, ...)
 
-        if ok and ret == true then
+        if ok and ret == emitter.HandlerPolicy.Discard then
             to_remove = callback
         elseif not ok then
             Log.error("While handling '" .. self.signal .. "': " .. ret)
@@ -128,16 +145,16 @@ function SignalEntry:emit(...)
     end
 end
 
----Remove all callbacks from this entry
-function SignalEntry:flush()
+---Remove all callbacks from this entry.
+function SignalEntry:clear()
     self.signals = {}
 end
 
----Signal Table.
+---Signal emitter.
 ---
----@class glacier.signal.SignalTable
----@field entries table<string, glacier.signal.SignalEntry>
-local SignalTable = {}
+---@class glacier.signal.Emitter
+---@field private entries table<string, glacier.signal.SignalEntry>
+local Emitter = {}
 
 ---Get the `SignalEntry` associated with a signal, or return a new entry.
 ---
@@ -145,7 +162,7 @@ local SignalTable = {}
 ---@param signal string Signal we want the entry to
 ---@nodiscard
 ---@return glacier.signal.SignalEntry
-function SignalTable:get_or_default(signal)
+function Emitter:get_or_default(signal)
     self.entries[signal] = self.entries[signal] or SignalEntry.new(signal)
 
     return self.entries[signal]
@@ -156,14 +173,14 @@ end
 ---@private
 ---@param name string Signal we want the entry to
 ---@return glacier.signal.SignalEntry?
-function SignalTable:get(name)
+function Emitter:get(name)
     return self.entries[name]
 end
 
 ---Emit a signal
 ---@param name string Signal to emit
 ---@param ... any Signal callback parameters
-function SignalTable:emit(name, ...)
+function Emitter:emit(name, ...)
     local entry = self:get(name)
 
     if not entry then
@@ -178,7 +195,7 @@ end
 ---@param name string Signal to connect to
 ---@param callback fun(...): boolean? Callback to register
 ---@return glacier.signal.SignalHandle
-function SignalTable:connect(name, callback)
+function Emitter:connect(name, callback)
     local entry = self:get_or_default(name)
 
     return entry:add_callback(callback)
@@ -186,7 +203,7 @@ end
 
 ---Disconnect a callback managed by a handle
 ---@param handle glacier.signal.SignalHandle Handle to the signal we want to disconnect
-function SignalTable:disconnect(handle)
+function Emitter:disconnect(handle)
     ---@diagnostic disable: invisible
     if handle.entry then
         local entry = self:get(handle.entry.signal)
@@ -194,26 +211,34 @@ function SignalTable:disconnect(handle)
         if entry then
             entry:remove_callback(handle.callback)
         else
-            Log.error(tostring(handle)(" wasn't meant for this SignalTable"))
+            Log.error(tostring(handle)(" wasn't meant for this Emitter"))
         end
     end
 end
 
 ---Disconnect all callbacks from this table.
-function SignalTable:disconnect_all()
+function Emitter:disconnect_all()
     for _, entry in pairs(self.entries) do
-        entry:flush()
+        entry:clear()
     end
 
     self.entries = {}
 end
 
---- Create a new SignalTable
----@return glacier.signal.SignalTable
-local function signal_table()
-    return setmetatable({
-        entries = {},
-    }, { __index = SignalTable })
+---Construct a new Emitter
+---
+---@param o? any
+---@return glacier.signal.Emitter
+function Emitter:new(o)
+    o = o or {}
+
+    o.entries = {}
+
+    setmetatable(o, self)
+    self.__index = self
+    return o
 end
 
-return signal_table
+emitter.Emitter = Emitter
+
+return emitter
