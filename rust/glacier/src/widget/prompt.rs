@@ -1,3 +1,18 @@
+//! Prompt widget.
+//!
+//! [`Prompt`] are [`TextInput`] area that call some callback upon submission. The primary usecase
+//! is to spawn some program when the `Prompt` is submitted, but the default callback can be
+//! overridden.
+//!
+//! By default, the prompt widget is hidden, and only shown when the [`Prompt`] is active by mean
+//! of calling the [`activate`] function. Calling that function will display the prompt and request
+//! focus to the underlying layer, so the [`Prompt`] gets all keyboard inputs. When `Enter` is
+//! pressed, the prompt content will be submit and sent to the prompt [`exe_callback`], or
+//! [`spawn`] if no callback was set.
+//!
+//! [`activate`]: Prompt::activate
+//! [`exe_callback`]: Prompt::exe_callback
+
 use std::marker::PhantomData;
 
 use snowcap_api::widget::{
@@ -19,35 +34,63 @@ use crate::{
 };
 
 pub mod style;
+#[doc(inline)]
 pub use style::{PromptStyle, Style};
 
-#[derive(Clone)]
-pub struct Prompt<Msg> {
-    state: State<Inner<Msg>>,
-}
+/// [`Prompt`] messages type.
+pub type Message = message::Message<Action>;
+type ExeCallback = Box<dyn FnMut(&str) + Send + Sync>;
 
-#[derive(Clone)]
-pub struct WeakPrompt<Msg>(WeakState<Inner<Msg>>);
-
+/// [`Prompt`] inner state.
 pub struct Inner<Msg> {
     base: WidgetBase,
     placeholder: String,
     content: String,
     style: Style,
+    exe_callback: Option<ExeCallback>,
     active: bool,
     id: String,
     message_builder: MessageBuilder<Action>,
     _msg: PhantomData<Msg>,
 }
 
+/// [`Prompt`] actions.
 #[derive(Clone, Debug)]
 pub enum Action {
     Input(String),
     Submit,
 }
 
-pub type Message = message::Message<Action>;
+/// Prompt widget.
+///
+/// See module level [documentation] for more information.
+///
+/// [documentation]: self
+#[derive(Clone)]
+pub struct Prompt<Msg> {
+    state: State<Inner<Msg>>,
+}
 
+/// Non-owning [`Prompt`].
+#[derive(Clone)]
+pub struct WeakPrompt<Msg>(WeakState<Inner<Msg>>);
+
+/// Default [`Prompt`] execution callback.
+pub fn spawn(input: &str) {
+    if input.is_empty() {
+        return;
+    }
+
+    let mut split = input.split_whitespace();
+
+    let Some(cmd) = split.next() else {
+        return;
+    };
+
+    pinnacle_api::process::Command::new(cmd).args(split).spawn();
+}
+
+/// Default [`Prompt`] appearance.
 pub fn default_style() -> Style {
     Style::new()
         .font(
@@ -70,6 +113,7 @@ where
 {
     const WIDGET_TYPE: &'static str = "Prompt";
 
+    /// Create a new [`Prompt`]
     pub fn new() -> Self {
         let base = WidgetBase::new(Self::WIDGET_TYPE);
         let id = base.to_string();
@@ -82,6 +126,7 @@ where
             placeholder: String::default(),
             content: String::default(),
             style,
+            exe_callback: None,
             active: false,
             id,
             message_builder,
@@ -91,63 +136,45 @@ where
         Self { state }
     }
 
+    /// Sets the [`Prompt`] style.
     pub fn style(self, style: Style) -> Self {
         self.state.0.lock().unwrap().style = style;
         self.emit(signal::RedrawNeeded);
         self
     }
 
+    /// Deactivate the [`Prompt`].
     pub fn deactivate(&mut self) {
         self.state.0.lock().unwrap().deactivate();
     }
 
+    /// Activate the [`Prompt`].
     pub fn activate(&mut self) {
         self.state.0.lock().unwrap().activate();
     }
 
+    /// Remove the [`Prompt`] focus.
     pub fn unfocus(&mut self) {
         self.state.0.lock().unwrap().unfocus();
     }
 
-    pub fn downgrade(&self) -> WeakPrompt<Msg> {
-        WeakPrompt(self.state.downgrade())
+    /// Sets the function to call when the prompt is submitted.
+    pub fn exe_callback<F>(&mut self, callback: F)
+    where
+        F: FnMut(&str) + Send + Sync + 'static,
+    {
+        self.state.0.lock().unwrap().exe_callback = Some(Box::new(callback));
     }
 
-    pub fn spawn(input: &str) {
-        if input.is_empty() {
-            return;
-        }
-
-        let mut split = input.split_whitespace();
-
-        let Some(cmd) = split.next() else {
-            return;
-        };
-
-        pinnacle_api::process::Command::new(cmd).args(split).spawn();
+    /// Create a [`WeakPrompt`] pointing to the same state.
+    pub fn downgrade(&self) -> WeakPrompt<Msg> {
+        WeakPrompt(self.state.downgrade())
     }
 }
 
 impl<Msg> WeakPrompt<Msg> {
     pub fn upgrade(&self) -> Option<Prompt<Msg>> {
         self.0.upgrade().map(|state| Prompt { state })
-    }
-}
-
-impl<Msg> Default for Prompt<Msg>
-where
-    Msg: Clone + Send + Sync + 'static,
-{
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<Msg> WithState for Prompt<Msg> {
-    type Type = Inner<Msg>;
-
-    fn with_state(&self) -> State<Self::Type> {
-        self.state.clone()
     }
 }
 
@@ -187,6 +214,16 @@ impl<Msg> Inner<Msg> {
 
     fn on_input(builder: MessageBuilder<Action>, input: String) -> WidgetMessage {
         builder.input(input)
+    }
+}
+
+impl MessageBuilder<Action> {
+    fn input(&self, input: String) -> WidgetMessage {
+        self.build(Action::Input(input))
+    }
+
+    fn submit(&self) -> WidgetMessage {
+        self.build(Action::Submit)
     }
 }
 
@@ -255,7 +292,11 @@ where
         match action {
             Action::Input(s) => self.content = s,
             Action::Submit => {
-                Prompt::<Msg>::spawn(&self.content);
+                if let Some(callback) = &mut self.exe_callback {
+                    callback(&self.content)
+                } else {
+                    spawn(&self.content);
+                }
 
                 self.unfocus()
             }
@@ -263,18 +304,25 @@ where
     }
 }
 
-impl From<Message> for WidgetMessage {
-    fn from(value: Message) -> Self {
-        Self::Prompt(value)
+impl<Msg> Default for Prompt<Msg>
+where
+    Msg: Clone + Send + Sync + 'static,
+{
+    fn default() -> Self {
+        Self::new()
     }
 }
 
-impl MessageBuilder<Action> {
-    fn input(&self, input: String) -> WidgetMessage {
-        self.build(Action::Input(input))
-    }
+impl<Msg> WithState for Prompt<Msg> {
+    type Type = Inner<Msg>;
 
-    fn submit(&self) -> WidgetMessage {
-        self.build(Action::Submit)
+    fn with_state(&self) -> State<Self::Type> {
+        self.state.clone()
+    }
+}
+
+impl From<Message> for WidgetMessage {
+    fn from(value: Message) -> Self {
+        Self::Prompt(value)
     }
 }
