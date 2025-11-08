@@ -6,8 +6,11 @@ edition = "2024"
 [dependencies]
 pinnacle-api = { git = "http://github.com/Ph4ntomas/pinnacle", branch = "next", default-features = false }
 snowcap-api = { git = "http://github.com/Ph4ntomas/pinnacle", branch = "next", default-features = false }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter", "registry"] }
 regex = "1.12.2"
 tokio = { version = "1.45.1", features = ["macros", "rt-multi-thread"]}
 chrono = { version = "0.4", features = [ "alloc" ] }
 xkbcommon = "0.8.0"
+
 glacier-derive = { path = "../glacier-derive" }
