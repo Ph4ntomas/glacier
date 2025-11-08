@@ -1,3 +1,14 @@
+//! TextBox widget
+//!
+//! [`TextBox`] widget allows to display simple text. When the text contained in the `TextBox` is
+//! updated, the widget will emit a [`RedrawNeeded`] signal to notify the containing layer that it
+//! need to be re-rendered.
+//!
+//! The `TextBox` default [`Style`] support styling based on the `TextBox` content, and can be
+//! replaced by a callback for more versatile styling.
+//!
+//! [`RedrawNeeded`]: crate::widget::signal::RedrawNeeded
+
 use snowcap_api::widget::{Alignment, Length, WidgetDef, container::Container, text::Text};
 
 use crate::{
@@ -7,52 +18,72 @@ use crate::{
 
 pub mod style;
 
-pub use style::{ContentStyle, Style, StyleLookup};
+use style::StyleInner;
+#[doc(inline)]
+pub use style::{ContentStyle, Style};
 
 type ViewCallback<Msg> =
     Box<dyn Fn(&str, ContentStyle) -> Option<WidgetDef<Msg>> + Send + Sync + 'static>;
 
+/// [`TextBox`] inner state.
 pub struct Inner<Msg> {
     base: WidgetBase,
     content: String,
-    styles: Style,
+    style: StyleInner,
     view_callback: Option<ViewCallback<Msg>>,
 }
 
+/// TextBox widget.
 #[derive(Clone)]
 pub struct TextBox<Msg> {
     state: State<Inner<Msg>>,
 }
 
+/// Non-owning version of a [`TextBox`].
 #[derive(Clone)]
 pub struct WeakTextBox<Msg>(WeakState<Inner<Msg>>);
 
-pub fn default_style() -> StyleLookup {
-    StyleLookup::default()
+/// Default [`TextBox`] appearance.
+pub fn default_style() -> Style {
+    Style::default()
 }
 
 impl<Msg> TextBox<Msg> {
+    /// Create a new [`TextBox`] with default content & style.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Create a new [`TextBox`] with the given content.
     pub fn with_content(content: impl Into<String>) -> Self {
         let state = State::new(Inner {
             base: WidgetBase::new("TextBox"),
             content: content.into(),
-            styles: default_style().into(),
+            style: default_style().into(),
             view_callback: None,
         });
 
         Self { state }
     }
 
-    pub fn style(self, styles: impl Into<Style>) -> Self {
-        self.state.0.lock().unwrap().styles = styles.into();
+    /// Sets the [`TextBox`]'s [`Style`].
+    pub fn style(self, style: Style) -> Self {
+        self.state.0.lock().unwrap().style = style.into();
         self.emit(signal::RedrawNeeded);
         self
     }
 
+    /// Sets a callback to use to generate [`ContentStyle`]s.
+    pub fn style_callback<F>(self, callback: F) -> Self
+    where
+        F: Fn(&str) -> ContentStyle + Send + Sync + 'static,
+    {
+        self.state.0.lock().unwrap().style = StyleInner::Callback(Box::new(callback));
+        self.emit(signal::RedrawNeeded);
+        self
+    }
+
+    /// Sets a callback to replace the default view function.
     pub fn view_callback<F>(self, callback: F) -> Self
     where
         F: Fn(&str, ContentStyle) -> Option<WidgetDef<Msg>> + Send + Sync + 'static,
@@ -62,15 +93,22 @@ impl<Msg> TextBox<Msg> {
         self
     }
 
+    /// Return a copy of the [`TextBox`] current content.
     pub fn get(&self) -> String {
         self.state.0.lock().unwrap().content.clone()
     }
 
+    /// Sets the [`TextBox`] content.
+    ///
+    /// Calling this function will emit a [`RedrawNeeded`] signal.
+    ///
+    /// [`RedrawNeeded`]: signal::RedrawNeeded
     pub fn set(&mut self, content: impl Into<String>) {
         self.state.0.lock().unwrap().content = content.into();
         self.emit(signal::RedrawNeeded);
     }
 
+    /// Create a new [`WeakTextBox`].
     pub fn downgrade(&self) -> WeakTextBox<Msg> {
         WeakTextBox(self.state.downgrade())
     }
@@ -80,6 +118,7 @@ impl<Msg> TextBox<Msg>
 where
     Msg: Clone,
 {
+    /// [`TextBox`] default view.
     pub fn default_view(
         content: impl Into<String>,
         mut style: ContentStyle,
@@ -123,7 +162,7 @@ where
     type Message = Msg;
 
     fn view(&self) -> Option<snowcap_api::widget::WidgetDef<Self::Message>> {
-        let style = self.styles.get(&self.content);
+        let style = self.style.get(&self.content);
 
         if let Some(callback) = &self.view_callback {
             callback(&self.content, style)

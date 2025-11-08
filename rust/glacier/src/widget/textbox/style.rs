@@ -1,37 +1,61 @@
+//! [`TextBox`] widget styling.
+//!
+//! [`TextBox`]: super::TextBox
+
 use std::collections::HashMap;
 
 use snowcap_api::widget::{Border, Color, Padding, font::Font};
 
+/// Per-content appearance of a [`TextBox`].
+///
+/// This type is passed to [`TextBox`] view function.
+///
+/// [`TextBox`]: super::TextBox
 #[derive(Default, Clone)]
 pub struct ContentStyle {
+    /// Text [`Color`].
     pub fg_color: Option<Color>,
+    /// Text background [`Color`].
     pub bg_color: Option<Color>,
+    /// [`Border`] for the text container.
     pub border: Option<Border>,
+    /// Text size, in pixels.
     pub pixels: Option<f32>,
+    /// [`Font`] used to render text.
     pub font: Option<Font>,
+    /// [`Padding`] for the text container.
     pub padding: Option<Padding>,
 }
 
+/// Appearance of a [`TextBox`].
+///
+/// [`TextBox`]: super::TextBox
 #[derive(Default, Clone)]
-pub struct StyleLookup {
+pub struct Style {
     default: ContentStyle,
     lookup: HashMap<String, ContentStyle>,
 }
 
-pub enum Style {
-    Lookup(StyleLookup),
-    Callback(Box<dyn Fn(&str) -> ContentStyle + Send + Sync + 'static>),
+/// Internal [`TextBox`] style holder.
+///
+/// [`TextBox`]: super::TextBox
+pub(crate) enum StyleInner {
+    Lookup(Style),
+    Callback(Box<dyn Fn(&str) -> ContentStyle + Send + Sync>),
 }
 
-impl StyleLookup {
+impl Style {
+    /// Create a new [`Style`] using default values.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Sets the default [`ContentStyle`].
     pub fn with_default(self, default: ContentStyle) -> Self {
         Self { default, ..self }
     }
 
+    /// Add a single override entry.
     pub fn add_override(self, key: impl Into<String>, style: ContentStyle) -> Self {
         let mut lookup = self.lookup;
         lookup.insert(key.into(), style);
@@ -39,6 +63,7 @@ impl StyleLookup {
         Self { lookup, ..self }
     }
 
+    /// Sets per-content overrides.
     pub fn overrides<I, S>(self, overrides: I) -> Self
     where
         I: IntoIterator<Item = (S, ContentStyle)>,
@@ -53,6 +78,7 @@ impl StyleLookup {
         Self { lookup, ..self }
     }
 
+    /// Sets default background [`Color`]
     pub fn bg_color(self, bg_color: Color) -> Self {
         Self {
             default: self.default.bg_color(bg_color),
@@ -60,6 +86,7 @@ impl StyleLookup {
         }
     }
 
+    /// Sets default text [`Color`]
     pub fn fg_color(self, fg_color: Color) -> Self {
         Self {
             default: self.default.fg_color(fg_color),
@@ -67,6 +94,7 @@ impl StyleLookup {
         }
     }
 
+    /// Sets the default [`Border`].
     pub fn border(self, border: Border) -> Self {
         Self {
             default: self.default.border(border),
@@ -74,6 +102,7 @@ impl StyleLookup {
         }
     }
 
+    /// Sets the default text size, in pixel.
     pub fn pixels(self, pixels: f32) -> Self {
         Self {
             default: self.default.pixels(pixels),
@@ -81,6 +110,7 @@ impl StyleLookup {
         }
     }
 
+    /// Sets the default [`Font`] to render text.
     pub fn font(self, font: Font) -> Self {
         Self {
             default: self.default.font(font),
@@ -88,6 +118,7 @@ impl StyleLookup {
         }
     }
 
+    /// Sets the default [`Padding`].
     pub fn padding(self, padding: Padding) -> Self {
         Self {
             default: self.default.padding(padding),
@@ -95,6 +126,7 @@ impl StyleLookup {
         }
     }
 
+    /// Get a [`ContentStyle`] for this content.
     pub fn get(&self, key: &str) -> ContentStyle {
         let Self { default, lookup } = self;
 
@@ -107,10 +139,12 @@ impl StyleLookup {
 }
 
 impl ContentStyle {
+    /// Create a new [`ContentStyle`] with default values.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Sets the background [`Color`].
     pub fn bg_color(self, bg_color: Color) -> Self {
         Self {
             bg_color: Some(bg_color),
@@ -118,6 +152,7 @@ impl ContentStyle {
         }
     }
 
+    /// Sets the text [`Color`].
     pub fn fg_color(self, fg_color: Color) -> Self {
         Self {
             fg_color: Some(fg_color),
@@ -125,6 +160,7 @@ impl ContentStyle {
         }
     }
 
+    /// Sets the [`Border`] style.
     pub fn border(self, border: Border) -> Self {
         Self {
             border: Some(border),
@@ -132,6 +168,7 @@ impl ContentStyle {
         }
     }
 
+    /// Sets the text size, in pixels.
     pub fn pixels(self, pixels: f32) -> Self {
         Self {
             pixels: Some(pixels),
@@ -139,6 +176,7 @@ impl ContentStyle {
         }
     }
 
+    /// Sets the [`Font`] to render text.
     pub fn font(self, font: Font) -> Self {
         Self {
             font: Some(font),
@@ -146,6 +184,7 @@ impl ContentStyle {
         }
     }
 
+    /// Sets the [`Padding`].
     pub fn padding(self, padding: Padding) -> Self {
         Self {
             padding: Some(padding),
@@ -153,6 +192,7 @@ impl ContentStyle {
         }
     }
 
+    /// Create a new [`ContentStyle`] by filling emtpy fields with the ones from `default`.
     pub fn apply_default(&self, default: &ContentStyle) -> Self {
         let Self {
             fg_color,
@@ -174,18 +214,8 @@ impl ContentStyle {
     }
 }
 
-impl Style {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn callback<F>(callback: F) -> Self
-    where
-        F: Fn(&str) -> ContentStyle + Send + Sync + 'static,
-    {
-        Self::Callback(Box::new(callback))
-    }
-
+impl StyleInner {
+    /// Get a [`ContentStyle`] for a given `content`.
     pub fn get(&self, content: &str) -> ContentStyle {
         match self {
             Self::Lookup(lookup) => lookup.get(content),
@@ -194,14 +224,14 @@ impl Style {
     }
 }
 
-impl Default for Style {
+impl Default for StyleInner {
     fn default() -> Self {
-        Self::Lookup(StyleLookup::default())
+        Self::Lookup(Style::default())
     }
 }
 
-impl From<StyleLookup> for Style {
-    fn from(value: StyleLookup) -> Self {
+impl From<Style> for StyleInner {
+    fn from(value: Style) -> Self {
         Self::Lookup(value)
     }
 }
