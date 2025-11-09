@@ -13,18 +13,18 @@ local Color = require("glacier.misc.color")
 local _taglist = {}
 
 ---Function to call when rendering a single tag.
----@alias glacier.widget.taglist.InnerViewFn fun(tag_name: string, tag: glacier.widget.taglist.TagStyle):snowcap.widget.WidgetDef
+---@alias glacier.widget.taglist.TagViewFn fun(tag_name: string, tag: glacier.widget.taglist.TagStyle):snowcap.widget.WidgetDef
 
 ---Function to call when rendering the list itself.
 ---
----@alias glacier.widget.taglist.OuterViewFn fun(children: snowcap.widget.WidgetDef[], tag: glacier.widget.taglist.Style):snowcap.widget.WidgetDef
+---@alias glacier.widget.taglist.ListViewFn fun(children: snowcap.widget.WidgetDef[], tag: glacier.widget.taglist.Style):snowcap.widget.WidgetDef
 
 ---glacier.widget.taglist module.
 ---
 ---@class glacier.widget.taglist
 ---@field mt metatable This module metatable
----@field inner_view glacier.widget.taglist.InnerViewFn Function to override the default rendering of each tags button.
----@field outer_view glacier.widget.taglist.OuterViewFn Function to override the default rendering of the list of tags.
+---@field tag_view glacier.widget.taglist.TagViewFn Function to override the default rendering of each tags button.
+---@field list_view glacier.widget.taglist.ListViewFn Function to override the default rendering of the list of tags.
 ---@field TagList glacier.widget.taglist.TagList Widget class.
 ---
 ---@overload fun(...:glacier.widget.taglist.Config):glacier.widget.taglist.TagList
@@ -244,7 +244,7 @@ end
 ---@param style glacier.widget.taglist.TagStyle Styling option for the tag.
 ---@return snowcap.widget.WidgetDef
 ---@diagnostic disable-next-line: unused-local
-function taglist.default_inner_view(tag_name, style)
+function taglist.default_tag_view(tag_name, style)
     return Widget.container({
         style = {
             background_color = style.bg_color,
@@ -264,7 +264,7 @@ end
 ---@param children snowcap.widget.WidgetDef[]
 ---@param style glacier.widget.taglist.Style
 ---@return snowcap.widget.WidgetDef
-function taglist.default_outer_view(children, style)
+function taglist.default_list_view(children, style)
     return Widget.row({
         height = Widget.length.Fill,
         item_alignment = Widget.alignment.CENTER,
@@ -279,8 +279,8 @@ end
 ---@field output pinnacle.output.OutputHandle Handle to this list `Output`.
 ---@field style? glacier.widget.taglist.Style Style to apply when building the `TagList`.
 ---@field throttle_scroll number Throttle scroll event.
----@field inner_view glacier.widget.taglist.InnerViewFn Function to override the rendering of the tag button child.
----@field outer_view glacier.widget.taglist.OuterViewFn Function to override the rendering of the list of tags.
+---@field tag_view glacier.widget.taglist.TagViewFn Function to override the rendering of the tag button child.
+---@field list_view glacier.widget.taglist.ListViewFn Function to override the rendering of the list of tags.
 ---@field private tags glacier.widget.taglist.Tag[] List of `Tag`s in this list.
 ---@field private prev_scroll number Last time a scroll event happened.
 local TagList = Base:new_class({ type = "TagList" })
@@ -357,7 +357,7 @@ function TagList:view_tags()
                 widget_id = self:id(),
                 action = _taglist.Action.ExitTag(v.handle),
             },
-            child = self.inner_view(v.name, style),
+            child = self.tag_view(v.name, style),
         })
 
         table.insert(list, view)
@@ -380,7 +380,7 @@ function TagList:view()
         on_scroll = function(delta)
             return self:on_scroll(delta)
         end,
-        child = self.outer_view(children, self.style),
+        child = self.list_view(children, self.style),
     })
 
     return list
@@ -601,8 +601,8 @@ end
 ---@field output pinnacle.output.OutputHandle
 ---@field style? glacier.widget.taglist.Style
 ---@field throttle_scroll? number
----@field inner_view? glacier.widget.taglist.InnerViewFn Function to override the default rendering of each tags.
----@field outer_view? glacier.widget.taglist.OuterViewFn Function to override the default rendering of the list of tags.
+---@field tag_view? glacier.widget.taglist.TagViewFn Function to override the default rendering of each tags.
+---@field list_view? glacier.widget.taglist.ListViewFn Function to override the default rendering of the list of tags.
 
 ---Create a new `TagList`.
 ---
@@ -637,8 +637,8 @@ function TagList:new(config)
             hover_transform = nil,
         },
         throttle_scroll = config.throttle_scroll or 0.05,
-        inner_view = taglist.inner_view or taglist.default_inner_view,
-        outer_view = taglist.outer_view or taglist.default_outer_view,
+        tag_view = taglist.tag_view or taglist.default_tag_view,
+        list_view = taglist.list_view or taglist.default_list_view,
     }
 
     ---@diagnostic disable-next-line:redefined-local
@@ -651,8 +651,8 @@ function TagList:new(config)
         tags = {},
         style = Style:new(config.style),
         throttle_scroll = config.throttle_scroll,
-        inner_view = config.inner_view,
-        outer_view = config.outer_view,
+        tag_view = config.tag_view,
+        list_view = config.list_view,
         prev_scroll = 0.0,
     })
 
