@@ -31,7 +31,7 @@ build = {
         ["glacier.modal"] = "glacier/modal/init.lua",
 
         ["glacier.signal"] = "glacier/signal/init.lua",
-        ["glacier.signal.signal_table"] = "glacier/signal/signal_table.lua",
+        ["glacier.signal.emitter"] = "glacier/signal/emitter.lua",
 
         ["glacier.utils"] = "glacier/utils/init.lua",
         ["glacier.utils.timer"] = "glacier/utils/timer.lua",
