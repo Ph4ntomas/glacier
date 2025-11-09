@@ -18,11 +18,6 @@ try to have a stable API.
 
 ## Features
 
-For now, these features are only implemented in lua due to the shorter design/dev/fix loop. I have
-a few more features I want to implement before porting everything to Rust, as well as some changes
-I want to send to Pinnacle which will heavily impact the library, so I may delay porting to rust
-until then.
-
 - A Bar to host widget
 - A timer api for easy asynchronous operation
 - Customizable widgets recipe
