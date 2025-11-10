@@ -78,6 +78,7 @@ struct Inner {
     callback_data: Arc<Mutex<KeyCallbackData>>,
     on_start: Option<StartCallback>,
     on_stop: Option<StopCallback>,
+    paused: bool,
 }
 
 /// Handle on the [`KeyGrabber`] state.
@@ -199,14 +200,93 @@ impl KeyGrabber {
 impl Handle {
     /// Start grabbing input.
     pub fn start(&self) {
-        if self.running() {
+        {
+            let mut inner = self.0.lock().unwrap();
+
+            if inner.handle.is_some() {
+                return;
+            }
+
+            self.start_impl(&mut *inner);
+        }
+
+        self.on_start();
+    }
+
+    /// Stop grabbing input.
+    pub fn stop(&self) {
+        {
+            let mut inner = self.0.lock().unwrap();
+
+            if inner.handle.is_some() {
+                self.stop_impl(&mut *inner);
+            } else {
+                return;
+            }
+
+            inner.paused = false;
+        }
+
+        self.on_stop();
+    }
+
+    /// Temporarily pause input grabbing.
+    pub fn pause(&self) {
+        let mut inner = self.0.lock().unwrap();
+        if let Some(handle) = &inner.handle
+            && let Err(e) = handle.set_keyboard_interactivity(layer::KeyboardInteractivity::None)
+        {
+            tracing::error!("{e}");
             return;
         }
+
+        inner.paused = true
+    }
+
+    /// Restart input grabbing.
+    pub fn unpause(&self) {
+        let mut inner = self.0.lock().unwrap();
+        if let Some(handle) = &inner.handle
+            && let Err(e) =
+                handle.set_keyboard_interactivity(layer::KeyboardInteractivity::Exclusive)
+        {
+            tracing::error!("{e}");
+            return;
+        }
+
+        inner.paused = false;
+    }
+
+    /// Whether the [`KeyGrabber`] is running.
+    ///
+    /// Returns true if the `KeyGrabber` has been started but not yet stopped.
+    pub fn running(&self) -> bool {
+        self.0.lock().unwrap().handle.is_some()
+    }
+
+    /// Create a non non-owning [`WeakHandle`] referring to the same [`KeyGrabber`] state.
+    pub fn downgrade(&self) -> WeakHandle {
+        WeakHandle(Arc::downgrade(&self.0))
+    }
+
+    fn relocate(&self) {
+        let mut inner = self.0.lock().unwrap();
+
+        self.stop_impl(&mut *inner);
+        self.start_impl(&mut *inner);
+    }
+
+    fn start_impl(&self, inner: &mut Inner) {
+        let interactivity = if inner.paused {
+            layer::KeyboardInteractivity::None
+        } else {
+            layer::KeyboardInteractivity::Exclusive
+        };
 
         let handle = layer::new_widget(
             KeyGrabberProgram,
             None,
-            layer::KeyboardInteractivity::Exclusive,
+            interactivity,
             layer::ExclusiveZone::Respect,
             layer::ZLayer::Overlay,
         );
@@ -218,7 +298,7 @@ impl Handle {
 
         handle.on_key_event({
             let weak = self.downgrade();
-            let weak_data = Arc::downgrade(&self.0.lock().unwrap().callback_data);
+            let weak_data = Arc::downgrade(&inner.callback_data);
             move |_, event: KeyEvent| {
                 let Some(grabber) = weak.upgrade() else {
                     return;
@@ -250,51 +330,15 @@ impl Handle {
             }
         });
 
-        self.0.lock().unwrap().handle = Some(handle);
-
-        self.on_start()
+        inner.handle = Some(handle);
     }
 
-    /// Stop grabbing input.
-    pub fn stop(&self) {
-        if let Some(handle) = &self.0.lock().unwrap().handle.take() {
+    fn stop_impl(&self, inner: &mut Inner) {
+        if let Some(handle) = &inner.handle.take() {
             handle.close();
         } else {
             return;
         }
-
-        self.on_stop();
-    }
-
-    /// Temporarily pause input grabbing.
-    pub fn pause(&self) {
-        if let Some(handle) = &self.0.lock().unwrap().handle
-            && let Err(e) = handle.set_keyboard_interactivity(layer::KeyboardInteractivity::None)
-        {
-            tracing::error!("{e}");
-        }
-    }
-
-    /// Restart input grabbing.
-    pub fn unpause(&self) {
-        if let Some(handle) = &self.0.lock().unwrap().handle
-            && let Err(e) =
-                handle.set_keyboard_interactivity(layer::KeyboardInteractivity::Exclusive)
-        {
-            tracing::error!("{e}");
-        }
-    }
-
-    /// Whether the [`KeyGrabber`] is running.
-    ///
-    /// Returns true if the `KeyGrabber` has been started but not yet stopped.
-    pub fn running(&self) -> bool {
-        self.0.lock().unwrap().handle.is_some()
-    }
-
-    /// Create a non non-owning [`WeakHandle`] referring to the same [`KeyGrabber`] state.
-    pub fn downgrade(&self) -> WeakHandle {
-        WeakHandle(Arc::downgrade(&self.0))
     }
 
     fn on_start(&self) {
@@ -365,10 +409,20 @@ impl Inner {
 impl Default for KeyGrabber {
     fn default() -> Self {
         let inner = Inner::default();
+        let handle = Handle(Arc::new(Mutex::new(inner)));
 
-        Self {
-            handle: Handle(Arc::new(Mutex::new(inner))),
-        }
+        pinnacle_api::output::connect_signal(pinnacle_api::signal::OutputSignal::Focused(
+            Box::new({
+                let weak = handle.downgrade();
+                move |_| {
+                    if let Some(handle) = weak.upgrade() {
+                        handle.relocate();
+                    }
+                }
+            }),
+        ));
+
+        Self { handle }
     }
 }
 

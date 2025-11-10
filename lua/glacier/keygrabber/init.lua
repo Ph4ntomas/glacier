@@ -38,6 +38,7 @@ local keygrabber = { mt = {} }
 ---
 ---@class glacier.keygrabber.KeyGrabber: snowcap.widget.Program
 ---@field private handle snowcap.layer.LayerHandle?
+---@field private paused boolean
 ---@field on_key_press? glacier.keygrabber.KeyPressCallback Called when a key press event is received.
 ---@field on_key_release? glacier.keygrabber.KeyReleaseCallback Called when a key release event is received.
 ---@field on_key_event? glacier.keygrabber.KeyEventCallback Called on every key events.
@@ -72,10 +73,13 @@ function KeyGrabber:start()
         return
     end
 
+    local interactivity = self.paused and Layer.keyboard_interactivity.NONE
+        or Layer.keyboard_interactivity.EXCLUSIVE
+
     local handle = Layer.new_widget({
         layer = Layer.zlayer.OVERLAY,
         exclusive_zone = "respect",
-        keyboard_interactivity = Layer.keyboard_interactivity.EXCLUSIVE,
+        keyboard_interactivity = interactivity,
         program = self,
     })
 
@@ -117,6 +121,7 @@ function KeyGrabber:stop()
     if self:running() then
         self.handle:close()
         self.handle = nil
+        self.paused = false
 
         if self.on_stop then
             self.on_stop(self)
@@ -148,6 +153,7 @@ end
 ---Calling this function while the KeyGrabber is not running will do nothing.
 function KeyGrabber:pause()
     if self:running() then
+        self.paused = true
         self:update_interactivity(Layer.keyboard_interactivity.NONE)
     end
 end
@@ -159,6 +165,7 @@ end
 ---Unpausing a stopped KeyGrabber does nothing.
 function KeyGrabber:unpause()
     if self:running() then
+        self.paused = false
         self:update_interactivity(Layer.keyboard_interactivity.EXCLUSIVE)
     end
 end
@@ -181,6 +188,19 @@ function KeyGrabber:run_paused(callback, ...)
     self:unpause()
 
     return ret
+end
+
+--- Relocate the keygrabber when output focus changes.
+---
+--- @private
+function KeyGrabber:relocate()
+    Log.warn("relocating ... Running state: " .. tostring(self:running()))
+    if self:running() then
+        self.handle:close()
+        self.handle = nil
+
+        self:start()
+    end
 end
 
 ---@class glacier.keygrabber.Config
@@ -222,10 +242,18 @@ function KeyGrabber:new(config)
         on_start = config.on_start,
         on_stop = config.on_stop,
         ignore_capture = config.ignore_capture,
+        paused = false,
     }
 
     setmetatable(grabber, self)
     self.__index = self
+
+    local Output = require("pinnacle.output")
+    Output.connect_signal({
+        focused = function(o)
+            grabber:relocate()
+        end,
+    })
 
     return grabber
 end
