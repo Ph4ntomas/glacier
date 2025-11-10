@@ -1,5 +1,5 @@
 package = "glacier"
-version = "0.0.1-1"
+version = "scm-0"
 source = {
     url = "git+https://git.sr.ht/~phantomas/glacier",
     dir = "glacier/lua",
