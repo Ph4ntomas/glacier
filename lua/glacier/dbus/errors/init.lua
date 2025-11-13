@@ -42,6 +42,7 @@ errors.type = {
     FieldsDontMatch = "Fields don't match",
     NoSignature = "Inner type signature must be known at that point.",
     Range = "RangeError",
+    TooNested = "Message too deep",
 }
 
 return errors
