@@ -34,4 +34,14 @@ errors.signature = {
     TooNested = "Invalid Signature: Maximum depth of container nesting is 32.",
 }
 
+---@enum glacier.dbus.errors.type
+errors.type = {
+    ExpectedValue = "ExpectedValue.",
+    Invalid = "InvalidType",
+    InvalidKey = "InvalidKey. Dict Keys must be basic types.",
+    FieldsDontMatch = "Fields don't match",
+    NoSignature = "Inner type signature must be known at that point.",
+    Range = "RangeError",
+}
+
 return errors
