@@ -1,5 +1,7 @@
 ---@class glacier.dbus.errors
-local errors = {}
+local errors = {
+    MissingParameter = "Missing Parameter.",
+}
 
 ---@enum glacier.dbus.errors.validation
 errors.validation = {
