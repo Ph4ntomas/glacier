@@ -1,7 +1,10 @@
 ---@class glacier.dbus.errors
 local errors = {
     InternalError = "Internal Error",
-    MissingParameter = "Missing Parameter.",
+    Expired = "Object expired",
+    MissingParameter = "Missing Parameter",
+    ObjectNotFound = "Object not found",
+    InterfaceNotFound = "Interface not found",
     Unimplemented = "Unimplemented",
 }
 

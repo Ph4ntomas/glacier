@@ -3,7 +3,7 @@ local _types = require("glacier.dbus.type")
 local _call_res = require("glacier.dbus.message.call_result")
 local _args = require("glacier.dbus.object.argument")
 
----@alias glacier.dbus.object.method.Handler fun(args...:...):glacier.dbus.message.CallError|...
+---@alias glacier.dbus.object.method.Handler fun(ctx:glacier.dbus.object.MethodContext, ...:glacier.dbus.type.StrongType):...
 
 ---@class glacier.dbus.object.Method
 ---@field _name glacier.dbus.type.MemberName
@@ -44,10 +44,11 @@ function Method:name()
     return self._name
 end
 
+---@param context glacier.dbus.object.MethodContext
 ---@param message glacier.dbus.Message
 ---
 ---@return glacier.dbus.Message
-function Method:call(message)
+function Method:call(context, message)
     if message:signature() ~= self._input_sig then
         local sig = message:signature()
         local msg = ("Signature mismatch. Expected '%s', got '%s'"):format(
@@ -65,7 +66,7 @@ function Method:call(message)
 
     --TODO: Handler may need access to something to send signals.
     local ok, ret = pcall(function()
-        return { self._handler(table.unpack(args)) }
+        return { self._handler(context, table.unpack(args)) }
     end)
     if not ok then
         if _types.is(ret, _call_res.CallError) then
@@ -182,6 +183,7 @@ function Builder:add_output(name, output_type)
 end
 
 ---Sets the `Method` handler.
+---@param handler glacier.dbus.object.method.Handler
 function Builder:with_handler(handler)
     if handler and type(handler) ~= "function" then
         return nil, _errors.type.Invalid

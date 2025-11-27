@@ -25,9 +25,10 @@ function Interface:name_str()
     return self._name:str()
 end
 
+---@param context glacier.dbus.object.MethodContext
 ---@param message glacier.dbus.Message
 ---@return glacier.dbus.Message
-function Interface:call(message)
+function Interface:call(context, message)
     local name = message:member():str()
     local method = self._methods[name]
 
@@ -35,7 +36,7 @@ function Interface:call(message)
         return message:reply_error(_errors.dbus.UnknownMethod, name)
     end
 
-    return method:call(message)
+    return method:call(context, message)
 end
 
 ---@class glacier.dbus.object.interface.Builder
@@ -74,7 +75,7 @@ function Builder:build()
 end
 
 local interface = {
-    Interface,
+    Interface = Interface,
 }
 
 ---@param name string|glacier.dbus.type.InterfaceName

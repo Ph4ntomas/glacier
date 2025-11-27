@@ -5,6 +5,9 @@ describe("glacier.dbus.object.method", function()
     local _message = require("glacier.dbus.message")
     local _call_res = require("glacier.dbus.message.call_result")
 
+    ---@type glacier.dbus.object.MethodContext
+    local method_ctx
+
     describe("glacier.dbus.object.method.Builder", function()
         it("can build method without args", function()
             local builder = _method.builder("TestMethod")
@@ -372,6 +375,7 @@ describe("glacier.dbus.object.method", function()
 
         it("rejects non-function handler", function()
             local builder = _method.builder("TestMethod")
+            ---@diagnostic disable-next-line:param-type-mismatch
             local ok, err = builder:with_handler("handler")
 
             assert.falsy(ok)
@@ -409,7 +413,7 @@ describe("glacier.dbus.object.method", function()
             local msg = _message.method_call(destination, path, interface, member)
             local method = builder:build()
 
-            local res = method:call(msg)
+            local res = method:call(method_ctx, msg)
             assert.equal(_types.message_type.MethodReturn, res:type())
             assert.truthy(called)
         end)
@@ -421,7 +425,7 @@ describe("glacier.dbus.object.method", function()
             local arg = _types.String("Test")
 
             builder:add_input("input", _types.String)
-            builder:with_handler(function(arg0)
+            builder:with_handler(function(_, arg0)
                 assert.truthy(_types.is(arg0, _types.String))
                 assert.same(arg, arg0)
                 called = arg0:get()
@@ -433,17 +437,17 @@ describe("glacier.dbus.object.method", function()
             local msg = _message.method_call(destination, path, interface, member, body)
             local method = builder:build()
 
-            local res = method:call(msg)
+            local res = method:call(method_ctx, msg)
             assert.equal(_types.message_type.MethodReturn, res:type())
             assert.equal("Test", called)
         end)
 
-        it("can a return value", function()
+        it("can return a value", function()
             local builder = _method.builder("TestMethod")
 
             builder:add_input("input", _types.ObjectPath)
             builder:add_output("output", _types.String)
-            builder:with_handler(function(arg0)
+            builder:with_handler(function(_, arg0)
                 return _types.String(arg0:get())
             end)
 
@@ -453,7 +457,7 @@ describe("glacier.dbus.object.method", function()
             local msg = _message.method_call(destination, path, interface, member, body)
             local method = builder:build()
 
-            local res = method:call(msg)
+            local res = method:call(method_ctx, msg)
             assert.equal(_types.message_type.MethodReturn, res:type())
 
             local expected = _types.Struct({
@@ -469,7 +473,7 @@ describe("glacier.dbus.object.method", function()
             builder:add_input("lhs", _types.Int32)
             builder:add_output("sum", _types.Int32)
 
-            builder:with_handler(function(lhs, rhs)
+            builder:with_handler(function(_, lhs, rhs)
                 return _types.Int32(lhs:get() + rhs:get())
             end)
 
@@ -480,7 +484,7 @@ describe("glacier.dbus.object.method", function()
             local msg = _message.method_call(destination, path, interface, member, body)
             local method = builder:build()
 
-            local res = method:call(msg)
+            local res = method:call(method_ctx, msg)
             assert.equal(_types.message_type.MethodReturn, res:type())
 
             local expected = _types.Struct({
@@ -497,7 +501,7 @@ describe("glacier.dbus.object.method", function()
             builder:add_output("sum", _types.Int32)
             builder:add_output("tostr", _types.String)
 
-            builder:with_handler(function(lhs, rhs)
+            builder:with_handler(function(_, lhs, rhs)
                 local sum = lhs:get() + rhs:get()
 
                 return _types.Int32(sum), _types.String(tostring(sum))
@@ -510,7 +514,7 @@ describe("glacier.dbus.object.method", function()
             local msg = _message.method_call(destination, path, interface, member, body)
             local method = builder:build()
 
-            local res = method:call(msg)
+            local res = method:call(method_ctx, msg)
             assert.equal(_types.message_type.MethodReturn, res:type())
 
             local expected = _types.Struct({
@@ -533,7 +537,7 @@ describe("glacier.dbus.object.method", function()
 
             local msg = _message.method_call(destination, path, interface, member)
 
-            local res = method:call(msg)
+            local res = method:call(method_ctx, msg)
             assert.equal(_types.message_type.Error, res:type())
             assert.equal(error_name, res:error_name())
             assert.equal(error_message, res.body[1]:get())
@@ -549,7 +553,7 @@ describe("glacier.dbus.object.method", function()
             })
 
             local msg = _message.method_call(destination, path, interface, member, body)
-            local res = method:call(msg)
+            local res = method:call(method_ctx, msg)
 
             assert.equal(_types.message_type.Error, res:type())
             assert.equal(_errors.dbus.Failed, res:error_name())
@@ -571,7 +575,7 @@ describe("glacier.dbus.object.method", function()
             })
             local msg = _message.method_call(destination, path, interface, member, body)
 
-            local res = method:call(msg)
+            local res = method:call(method_ctx, msg)
 
             assert.falsy(called)
             assert.equal(_types.message_type.Error, res:type())
@@ -589,7 +593,7 @@ describe("glacier.dbus.object.method", function()
 
             local msg = _message.method_call(destination, path, interface, member)
 
-            local res = method:call(msg)
+            local res = method:call(method_ctx, msg)
 
             assert.equal(_types.message_type.Error, res:type())
             assert.equal(_errors.dbus.Failed, res:error_name())
@@ -609,7 +613,7 @@ describe("glacier.dbus.object.method", function()
 
             local msg = _message.method_call(destination, path, interface, member)
 
-            local res = method:call(msg)
+            local res = method:call(method_ctx, msg)
 
             assert.equal(_types.message_type.Error, res:type())
             assert.equal(_errors.dbus.Failed, res:error_name())
@@ -630,7 +634,7 @@ describe("glacier.dbus.object.method", function()
 
             local msg = _message.method_call(destination, path, interface, member)
 
-            local res = method:call(msg)
+            local res = method:call(method_ctx, msg)
 
             assert.equal(_types.message_type.Error, res:type())
             assert.equal(error_name, res:error_name())

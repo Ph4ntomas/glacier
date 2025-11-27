@@ -1,0 +1,269 @@
+local _errors = require("glacier.dbus.errors")
+local _interface = require("glacier.dbus.object.interface")
+local _internals = require("glacier.dbus.object.internals")
+local _method = require("glacier.dbus.object.method")
+local _types = require("glacier.dbus.type")
+
+---@class glacier.dbus.object.WeakMethodContext
+---@field _connection glacier.dbus.Connection
+---@field _router glacier.dbus.ObjectRouter
+---@field _interface glacier.dbus.object.Interface
+local WeakMethodContext = {}
+WeakMethodContext.__index = WeakMethodContext
+WeakMethodContext.__name = "dbus.object.WeakMethodContext"
+WeakMethodContext.__mode = "kv"
+
+---@param connection glacier.dbus.Connection
+---@param router glacier.dbus.ObjectRouter
+---@param interface glacier.dbus.object.Interface
+---
+---@return glacier.dbus.object.WeakMethodContext
+local function WeakMethodContext_new(connection, router, interface)
+    return setmetatable({
+        _connection = connection,
+        _router = router,
+        _interface = interface,
+    }, WeakMethodContext)
+end
+
+---@return glacier.dbus.Connection?
+---@return string?
+function WeakMethodContext:connection()
+    if self._connection then
+        return self._connection
+    else
+        return nil, _errors.Expired
+    end
+end
+
+---@return glacier.dbus.ObjectRouter?
+---@return string?
+function WeakMethodContext:router()
+    if self._router then
+        return self._router
+    else
+        return nil, _errors.Expired
+    end
+end
+
+---@return glacier.dbus.object.Interface?
+---@return string?
+function WeakMethodContext:interface()
+    if self._interface then
+        return self._interface
+    else
+        return nil, _errors.Expired
+    end
+end
+
+---@class glacier.dbus.object.MethodContext
+---@field _weak glacier.dbus.object.WeakMethodContext
+---@field _path glacier.dbus.type.ObjectPath
+local MethodContext = {}
+MethodContext.__index = MethodContext
+MethodContext.__name = "dbus.object.MethodContext"
+
+---@param connection glacier.dbus.Connection
+---@param router glacier.dbus.ObjectRouter
+---@param interface glacier.dbus.object.Interface
+---@param path glacier.dbus.type.ObjectPath
+local function MethodContext_new(connection, router, path, interface)
+    return setmetatable({
+        _weak = WeakMethodContext_new(connection, router, interface),
+        _path = _types.object_path.from_str(path:get()),
+    }, MethodContext)
+end
+
+function MethodContext:connection()
+    return self._weak:connection()
+end
+
+function MethodContext:router()
+    return self._weak:router()
+end
+
+function MethodContext:interface()
+    return self._weak:interface()
+end
+
+function MethodContext:path()
+    return self._path
+end
+
+---@class glacier.dbus.Object
+---@field _interfaces table<string, glacier.dbus.object.Interface>
+local Object = {}
+Object.__index = Object
+Object.__name = "glacier.dbus.Object"
+
+function Object.new()
+    return setmetatable({
+        _interfaces = {},
+    }, Object)
+end
+
+function Object:add_interface(interface)
+    if not _types.is(interface, _interface.Interface) then
+        return nil, _errors.type.Invalid
+    end
+
+    local name = interface:name_str()
+    self._interfaces[name] = interface
+
+    return self
+end
+
+---@param name string
+---@return glacier.dbus.object.Interface?
+function Object:interface(name)
+    return self._interfaces[name]
+end
+
+---@class glacier.dbus.ObjectRouter
+---@field _weak_connection glacier.dbus.WeakConnection
+---@field _objects table<string, glacier.dbus.Object>
+local ObjectRouter = {}
+ObjectRouter.__index = ObjectRouter
+ObjectRouter.__name = "glacier.dbus.ObjectRouter"
+
+---@param weak glacier.dbus.WeakConnection
+local function ObjectRouter_new(weak)
+    return setmetatable({
+        _weak_connection = weak,
+        _objects = {},
+    }, ObjectRouter)
+end
+
+---@param path string|glacier.dbus.type.ObjectPath
+---@param object glacier.dbus.Object
+function ObjectRouter:object_at(path, object)
+    local path_str, err = _internals.check_path(path)
+    if not path_str then
+        return nil, err
+    end
+
+    if not _types.is(object, Object) then
+        return nil, _errors.type.Invalid
+    end
+
+    self._objects[path_str] = object
+    return self
+end
+
+---@param path string|glacier.dbus.type.ObjectPath
+---
+---@return glacier.dbus.object.SignalEmitter?
+---@return string?
+function ObjectRouter:emitter_for(path)
+    local c = self._weak_connection:upgrade()
+    if not c then
+        return nil, _errors.Expired
+    end
+
+    local path_str, err = _internals.check_path(path)
+    if not path_str then
+        return nil, err
+    end
+
+    if not self._objects[path_str] then
+        return nil, _errors.ObjectNotFound
+    end
+
+    return _signal_emitter.new(c, path)
+end
+
+---@param path string|glacier.dbus.type.ObjectPath
+---@param interface glacier.dbus.object.Interface
+function ObjectRouter:interface_at(path, interface)
+    local path_str, err = _internals.check_path(path)
+    if not path_str then
+        return nil, err
+    end
+
+    self._objects[path_str] = self._objects[path_str] or Object.new()
+
+    local ok
+    ok, err = self._objects[path_str].add_interface(interface)
+
+    if not ok then
+        return nil, err
+    end
+
+    return self
+end
+
+---@param path string|glacier.dbus.type.ObjectPath
+---@param interface string|glacier.dbus.type.InterfaceName
+---
+---@return glacier.dbus.object.Interface?
+---@return string?
+function ObjectRouter:get_interface(path, interface)
+    local path_str, err = _internals.check_path(path)
+    if not path_str then
+        return nil, err
+    end
+
+    ---@diagnostic disable-next-line:cast-local-type
+    interface, err = _types.interface_name.try_from(interface)
+    if not interface then
+        return nil, err
+    end
+
+    local obj = self._objects[path_str]
+    if not obj then
+        return nil, _errors.ObjectNotFound
+    end
+
+    local iface = obj:interface(interface:str())
+    if not iface then
+        return nil, _errors.InterfaceNotFound
+    end
+
+    return iface
+end
+
+---@param connection glacier.dbus.Connection
+---@param message glacier.dbus.Message
+---
+---@return glacier.dbus.Message # Message response, if the message was dispatched
+function ObjectRouter:dispatch(connection, message)
+    assert(message:type() == _types.message_type.MethodCall, "Expected MethodCall")
+
+    local path = message:path() --[[@as glacier.dbus.type.ObjectPath]]
+    ---@type string
+    local path_str = path:get()
+    local object = self._objects[path_str]
+    if not object then
+        return message:reply_error(_errors.dbus.UnknownObject, path_str)
+    end
+
+    local name = message:interface():str()
+    local interface = object:interface(name)
+
+    if not interface then
+        return message:reply_error(_errors.dbus.UnknownInterface, name)
+    end
+
+    local ctx = MethodContext_new(connection, self, path, interface)
+
+    return interface:call(ctx, message)
+end
+
+---@class glacier.dbus.object
+local object = {
+    Object = Object,
+    Interface = _interface.Interface,
+    Method = _method.Method,
+
+    interface = _interface,
+    method = _method,
+}
+
+---@param weak glacier.dbus.WeakConnection
+---
+---@return glacier.dbus.ObjectRouter
+function object.router(weak)
+    return ObjectRouter_new(weak)
+end
+
+return object

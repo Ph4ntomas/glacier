@@ -8,6 +8,9 @@ describe("glacier.dbus.object.interface", function()
 
     local interface_name = "org.test.Interface"
 
+    ---@type glacier.dbus.object.MethodContext
+    local method_ctx
+
     local test_methods
     local called
     setup(function()
@@ -99,7 +102,7 @@ describe("glacier.dbus.object.interface", function()
         it("Dispatch method correctly", function()
             local msg = test_message("CallCheck")
 
-            test_interface:call(msg)
+            test_interface:call(method_ctx, msg)
 
             assert.truthy(called)
         end)
@@ -107,7 +110,7 @@ describe("glacier.dbus.object.interface", function()
         it("forward method return", function()
             local msg = test_message("GetName")
 
-            local res = test_interface:call(msg)
+            local res = test_interface:call(method_ctx, msg)
 
             assert.equal(_types.message_type.MethodReturn, res:type())
 
@@ -120,7 +123,7 @@ describe("glacier.dbus.object.interface", function()
         it("forward errors", function()
             local msg = test_message("Failing")
 
-            local res = test_interface:call(msg)
+            local res = test_interface:call(method_ctx, msg)
 
             assert.equal(_types.message_type.Error, res:type())
             assert.equal("org.test.Failing", res:error_name())
@@ -130,7 +133,7 @@ describe("glacier.dbus.object.interface", function()
             local method_name = "UndefinedMethod"
             local msg = test_message(method_name)
 
-            local res = test_interface:call(msg)
+            local res = test_interface:call(method_ctx, msg)
 
             assert.equal(_types.message_type.Error, res:type())
             assert.equal(_errors.dbus.UnknownMethod, res:error_name())

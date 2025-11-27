@@ -6,9 +6,13 @@ local types = require("glacier.dbus.type")
 local messages = require("glacier.dbus.message")
 
 local _errors = require("glacier.dbus.errors")
+local _types = require("glacier.dbus.type")
+local _message_type = require("glacier.dbus.type.message_type")
 local _watch = require("glacier.dbus.connection.watch")
 local _timeout = require("glacier.dbus.connection.timeout")
 local _pending = require("glacier.dbus.connection.pending_call")
+local _obj_internals = require("glacier.dbus.object.internals")
+local _object = require("glacier.dbus.object")
 
 ---@alias glacier.dbus.connection.Filter fun(con: glacier.dbus.Connection, msg: glacier.dbus.Message):boolean?
 ---@alias glacier.dbus.connection.MatchHandler fun(con: glacier.dbus.Connection, msg: glacier.dbus.Message):boolean
@@ -72,6 +76,8 @@ end
 ---@field matchers table<string, glacier.dbus.connection.Matcher[]>
 ---@field filters glacier.dbus.connection.Filter[]
 ---@field wakeup_cv cqueues.condition
+---@field _router? glacier.dbus.ObjectRouter
+---@field _cqueues? cqueues.cqueue
 ---@field _stopping boolean
 ---@field inner ldbus.DBusConnection
 local Connection = {}
@@ -203,6 +209,17 @@ function Connection:_fallback_message_handler(message)
         if v(self, message) then
             return true
         end
+    end
+
+    if self._router and message:type() == _message_type.MethodCall then
+        local cq = assert(self._cqueues, "ERROR: cqueue not available")
+
+        cq:wrap(function()
+            local response = self._router:dispatch(self, message)
+
+            self:send(response)
+        end)
+        return true
     end
 
     local matched = nil
@@ -479,6 +496,15 @@ function Connection:release_name(name)
     return ReleaseNameReply[ret]
 end
 
+---Return the connection `ObjectRouter`, creating it if needed.
+---
+---@return glacier.dbus.ObjectRouter
+function Connection:router()
+    self._router = self._router or _object.router(WeakConnection.new(self))
+
+    return self._router
+end
+
 ---Set the message_handler for unhandled messages.
 ---
 ---@param handler fun(self:glacier.dbus.Connection, message:glacier.dbus.Message)
@@ -489,10 +515,15 @@ end
 ---Dispatch all pending data & complete message in the incoming queue.
 function Connection:dispatch_all()
     local status = self.inner:get_dispatch_status()
+    -- For some reason, we can't access cqueues context from ldbus scope. Let's grab it here temporarily
+    self._cqueues = cqueues.running()
 
     while status == "data_remains" do
         status = self.inner:dispatch()
     end
+
+    -- Releasing the queue so gc can do its job if needed.
+    self._cqueues = nil
 end
 
 ---Poll all Pollable objects, calling their handle function when ready.
@@ -546,6 +577,7 @@ end
 ---@field names glacier.dbus.type.WellKnownName[]
 ---@field name_flags glacier.dbus.connection.RequestNameFlags
 ---@field filters glacier.dbus.connection.Filter[]
+---@field objects? table<string, glacier.dbus.Object>
 local ConnectionBuilder = {}
 ConnectionBuilder.__index = ConnectionBuilder
 ConnectionBuilder.__name = "dbus.connection.Builder"
@@ -593,6 +625,45 @@ function ConnectionBuilder:replace_existing_name(replace)
     self.name_flags.replace_existing = replace
 end
 
+---@param path string|glacier.dbus.type.ObjectPath
+---@param iface glacier.dbus.object.Interface
+---@return glacier.dbus.ConnectionBuilder?
+---@return string?
+function ConnectionBuilder:with_interface_at(path, iface)
+    local path_str, err = _obj_internals.check_path(path)
+    if not path_str then
+        return nil, err
+    end
+
+    if not _types.is(iface, _object.Interface) then
+        return nil, _errors.type.Invalid
+    end
+
+    self.objects = self.objects or {}
+    self.objects[path_str] = self.objects[path_str] or _object.Object.new()
+    self.objects[path_str]:add_interface(iface)
+    return self
+end
+
+---@param path string|glacier.dbus.type.ObjectPath
+---@param object glacier.dbus.Object
+---@return glacier.dbus.ConnectionBuilder?
+---@return string?
+function ConnectionBuilder:with_object_at(path, object)
+    local path_str, err = _obj_internals.check_path(path)
+    if not path_str then
+        return nil, err
+    end
+
+    if not _types.is(object, _object.Object) then
+        return nil, _errors.type.Invalid
+    end
+
+    self.objects = self.objects or {}
+    self.objects[path_str] = object
+    return self
+end
+
 ---@param f glacier.dbus.connection.Filter
 ---@return glacier.dbus.ConnectionBuilder?
 ---@return string?
@@ -618,6 +689,13 @@ function ConnectionBuilder:build()
     end
 
     local ret = Connection_new(conn, self.filters)
+
+    if self.objects then
+        local router = ret:router()
+        for k, v in pairs(self.objects) do
+            router:object_at(k, v)
+        end
+    end
 
     for _, name in ipairs(self.names) do
         ret:request_name(name, self.name_flags)
