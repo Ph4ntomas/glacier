@@ -39,6 +39,27 @@ function Interface:call(context, message)
     return method:call(context, message)
 end
 
+---@return string
+function Interface:introspect()
+    local iface_prefix = "    "
+    local open_str = ("<interface name=%q>\n"):format(self:name_str())
+    local close_str = "</interface>"
+
+    local methods = {}
+    for _, v in pairs(self._methods) do
+        table.insert(methods, v:introspect())
+    end
+
+    local ret = iface_prefix .. open_str
+
+    if #methods > 0 then
+        ret = ret .. table.concat(methods, "\n") .. "\n"
+    end
+
+    ret = ret .. iface_prefix .. close_str
+    return ret
+end
+
 ---@class glacier.dbus.object.interface.Builder
 ---@field name glacier.dbus.type.InterfaceName
 ---@field methods table<string, glacier.dbus.object.Method>

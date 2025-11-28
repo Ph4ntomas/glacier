@@ -4,6 +4,14 @@ local _internals = require("glacier.dbus.object.internals")
 local _method = require("glacier.dbus.object.method")
 local _types = require("glacier.dbus.type")
 
+local _introspection_intf = "org.freedesktop.DBus.Introspectable"
+local _introspection_member = "Introspect"
+local _introspection_header = [[
+<!DOCTYPE node PUBLIC   "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+                        "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+
+]]
+
 ---@class glacier.dbus.object.WeakMethodContext
 ---@field _connection glacier.dbus.Connection
 ---@field _router glacier.dbus.ObjectRouter
@@ -119,6 +127,16 @@ function Object:interface(name)
     return self._interfaces[name]
 end
 
+function Object:introspect()
+    local iface = {}
+
+    for _, intf in pairs(self._interfaces) do
+        table.insert(iface, intf:introspect())
+    end
+
+    return table.concat(iface, "\n")
+end
+
 ---@class glacier.dbus.ObjectRouter
 ---@field _weak_connection glacier.dbus.WeakConnection
 ---@field _objects table<string, glacier.dbus.Object>
@@ -222,12 +240,48 @@ function ObjectRouter:get_interface(path, interface)
     return iface
 end
 
+---@param message glacier.dbus.Message
+---@return glacier.dbus.Message
+function ObjectRouter:_introspect(message)
+    local path = message:path():get()
+
+    local pattern = path == "/" and "^/" or "^" .. path .. "/"
+    local objects = {}
+
+    for k, o in pairs(self._objects) do
+        local rem, match = string.gsub(k, pattern, "")
+
+        if path == k then
+            table.insert(objects, o:introspect())
+            --TODO: Proper object introspection.
+        elseif match then
+            table.insert(objects, ("  <node name=%q/>"):format(rem))
+        end
+    end
+
+    local content = ([[
+<node>
+%s
+</node>
+    ]]):format(table.concat(objects, "\n"))
+
+    local str = _introspection_header .. content
+
+    return message:method_return(_types.Struct{
+        _types.String(str)
+    })
+end
+
 ---@param connection glacier.dbus.Connection
 ---@param message glacier.dbus.Message
 ---
 ---@return glacier.dbus.Message # Message response, if the message was dispatched
 function ObjectRouter:dispatch(connection, message)
     assert(message:type() == _types.message_type.MethodCall, "Expected MethodCall")
+
+    if message:interface():str() == _introspection_intf and message:member():str() == _introspection_member then
+        return self:_introspect(message)
+    end
 
     local path = message:path() --[[@as glacier.dbus.type.ObjectPath]]
     ---@type string

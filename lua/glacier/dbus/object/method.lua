@@ -97,6 +97,41 @@ function Method:call(context, message)
     return message:method_return(body)
 end
 
+---@return string
+function Method:introspect()
+    local method_prefix = "      "
+    local open_str = ("<method name=%q>\n"):format(self._name:str())
+    local close_str = "</method>"
+
+    local in_args = {}
+    if self._input_args then
+        for _, v in ipairs(self._input_args) do
+            table.insert(in_args, v:introspect())
+        end
+    end
+
+    local out_args = {}
+    if self._output_args then
+        for _, v in ipairs(self._output_args) do
+            table.insert(out_args, v:introspect())
+        end
+    end
+
+    local ret = method_prefix .. open_str
+
+    if #in_args > 0 then
+        ret = ret .. table.concat(in_args, "\n") .. "\n"
+    end
+
+    if #out_args > 0 then
+        ret = ret .. table.concat(out_args, "\n") .. "\n"
+    end
+
+    ret = ret .. method_prefix .. close_str
+
+    return ret
+end
+
 ---@class glacier.dbus.object.method.Builder
 ---@field name glacier.dbus.type.MemberName
 ---@field handler? fun(...:any): ...
