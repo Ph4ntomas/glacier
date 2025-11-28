@@ -2,6 +2,7 @@ local _errors = require("glacier.dbus.errors")
 local _interface = require("glacier.dbus.object.interface")
 local _internals = require("glacier.dbus.object.internals")
 local _method = require("glacier.dbus.object.method")
+local _signal_emitter = require("glacier.dbus.object.signal_emitter")
 local _types = require("glacier.dbus.type")
 
 local _introspection_intf = "org.freedesktop.DBus.Introspectable"
@@ -67,6 +68,7 @@ end
 ---@class glacier.dbus.object.MethodContext
 ---@field _weak glacier.dbus.object.WeakMethodContext
 ---@field _path glacier.dbus.type.ObjectPath
+---@field _emitter glacier.dbus.object.SignalEmitter
 local MethodContext = {}
 MethodContext.__index = MethodContext
 MethodContext.__name = "dbus.object.MethodContext"
@@ -79,6 +81,7 @@ local function MethodContext_new(connection, router, path, interface)
     return setmetatable({
         _weak = WeakMethodContext_new(connection, router, interface),
         _path = _types.object_path.from_str(path:get()),
+        _emitter = _signal_emitter.new(connection, path),
     }, MethodContext)
 end
 
@@ -96,6 +99,10 @@ end
 
 function MethodContext:path()
     return self._path
+end
+
+function MethodContext:emitter()
+    return self._emitter
 end
 
 ---@class glacier.dbus.Object
@@ -267,9 +274,9 @@ function ObjectRouter:_introspect(message)
 
     local str = _introspection_header .. content
 
-    return message:method_return(_types.Struct{
-        _types.String(str)
-    })
+    return message:method_return(_types.Struct({
+        _types.String(str),
+    }))
 end
 
 ---@param connection glacier.dbus.Connection
@@ -279,7 +286,10 @@ end
 function ObjectRouter:dispatch(connection, message)
     assert(message:type() == _types.message_type.MethodCall, "Expected MethodCall")
 
-    if message:interface():str() == _introspection_intf and message:member():str() == _introspection_member then
+    if
+        message:interface():str() == _introspection_intf
+        and message:member():str() == _introspection_member
+    then
         return self:_introspect(message)
     end
 

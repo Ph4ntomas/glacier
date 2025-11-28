@@ -1,10 +1,12 @@
 local _errors = require("glacier.dbus.errors")
 local _types = require("glacier.dbus.type")
 local _method = require("glacier.dbus.object.method")
+local _signal = require("glacier.dbus.object.signal")
 
 ---@class glacier.dbus.object.Interface
 ---@field _name glacier.dbus.type.InterfaceName
 ---@field _methods table<string, glacier.dbus.object.Method>
+---@field _signals table<string, glacier.dbus.object.Signal>
 local Interface = {}
 Interface.__index = Interface
 Interface.__name = "dbus.object.Interface"
@@ -39,6 +41,38 @@ function Interface:call(context, message)
     return method:call(context, message)
 end
 
+---@param emitter glacier.dbus.object.SignalEmitter
+---@param member string|glacier.dbus.type.MemberName
+---@param body? glacier.dbus.type.Struct
+function Interface:emit(emitter, member, body)
+    return self:emit_to(emitter, nil, member, body)
+end
+
+---@param emitter glacier.dbus.object.SignalEmitter
+---@param destination? glacier.dbus.type.ToBusName
+---@param member string|glacier.dbus.type.MemberName
+---@param body? glacier.dbus.type.Struct
+function Interface:emit_to(emitter, destination, member, body)
+    local err
+    ---@diagnostic disable-next-line:cast-local-type
+    member, err = _types.member_name.try_from(member)
+    if not member then
+        return nil, err
+    end
+
+    local name = member:str()
+    local signal = self._signals and self._signals[name]
+    if not signal then
+        return nil, _errors.UnknownSignal
+    end
+
+    if not signal:check_body() then
+        return nil, _errors.type.Invalid
+    end
+
+    return emitter:emit_to(destination, self._name, member, body)
+end
+
 ---@return string
 function Interface:introspect()
     local iface_prefix = "    "
@@ -50,10 +84,19 @@ function Interface:introspect()
         table.insert(methods, v:introspect())
     end
 
+    local signals = {}
+    for _, v in pairs(self._signals) do
+        table.insert(signals, v:introspect())
+    end
+
     local ret = iface_prefix .. open_str
 
     if #methods > 0 then
         ret = ret .. table.concat(methods, "\n") .. "\n"
+    end
+
+    if #signals > 0 then
+        ret = ret .. table.concat(signals, "\n") .. "\n"
     end
 
     ret = ret .. iface_prefix .. close_str
@@ -63,6 +106,7 @@ end
 ---@class glacier.dbus.object.interface.Builder
 ---@field name glacier.dbus.type.InterfaceName
 ---@field methods table<string, glacier.dbus.object.Method>
+---@field signals table<string, glacier.dbus.object.Signal>
 local Builder = {}
 Builder.__index = Builder
 Builder.__name = "dbus.object.interface.Builder"
@@ -73,6 +117,7 @@ local function Builder_new(name)
     return setmetatable({
         name = name,
         methods = {},
+        signals = {},
     }, Builder)
 end
 
@@ -88,10 +133,24 @@ function Builder:with_method(method)
     return self
 end
 
+---@param signal glacier.dbus.object.Signal
+function Builder:with_signal(signal)
+    if not _types.is(signal, _signal.Signal) then
+        return nil, _errors.type.Invalid
+    end
+
+    local name = signal:name():str()
+    self.signals[name] = signal
+
+    return self
+end
+
+---@return glacier.dbus.object.Interface
 function Builder:build()
     return Interface_new({
         _name = self.name,
         _methods = self.methods,
+        _signals = self.signals,
     })
 end
 

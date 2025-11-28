@@ -6,6 +6,7 @@ local errors = {
     ObjectNotFound = "Object not found",
     InterfaceNotFound = "Interface not found",
     Unimplemented = "Unimplemented",
+    UnknownSignal = "Unknown signal",
 }
 
 ---@enum glacier.dbus.errors.validation
