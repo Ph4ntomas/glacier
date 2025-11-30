@@ -1,4 +1,5 @@
 local _errors = require("glacier.dbus.errors")
+local _fdo = require("glacier.dbus.object.freedesktop")
 local _interface = require("glacier.dbus.object.interface")
 local _internals = require("glacier.dbus.object.internals")
 local _method = require("glacier.dbus.object.method")
@@ -112,9 +113,11 @@ Object.__index = Object
 Object.__name = "glacier.dbus.Object"
 
 function Object.new()
-    return setmetatable({
+    local ret = setmetatable({
         _interfaces = {},
     }, Object)
+
+    return ret:add_interface(_fdo.Properties)
 end
 
 function Object:add_interface(interface)
