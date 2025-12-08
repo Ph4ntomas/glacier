@@ -211,7 +211,7 @@ function ObjectRouter:interface_at(path, interface)
     self._objects[path_str] = self._objects[path_str] or Object.new()
 
     local ok
-    ok, err = self._objects[path_str].add_interface(interface)
+    ok, err = self._objects[path_str]:add_interface(interface)
 
     if not ok then
         return nil, err
