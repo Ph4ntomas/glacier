@@ -164,6 +164,7 @@ end
 ---@return string?
 function Builder:readable(v)
     self.read = v == nil or v == true
+    return self
 end
 
 ---@param v? boolean # If nil, make the property writeable. Otherwise, sets the flag.
@@ -172,6 +173,7 @@ end
 ---@return string?
 function Builder:writeable(v)
     self.write = v == nil or v == true
+    return self
 end
 
 ---@param policy glacier.dbus.object.property.SignalPolicy
