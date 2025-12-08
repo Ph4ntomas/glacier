@@ -70,6 +70,7 @@ end
 ---@field _weak glacier.dbus.object.WeakMethodContext
 ---@field _path glacier.dbus.type.ObjectPath
 ---@field _emitter glacier.dbus.object.SignalEmitter
+---@field _message glacier.dbus.Message
 local MethodContext = {}
 MethodContext.__index = MethodContext
 MethodContext.__name = "dbus.object.MethodContext"
@@ -78,11 +79,12 @@ MethodContext.__name = "dbus.object.MethodContext"
 ---@param router glacier.dbus.ObjectRouter
 ---@param interface glacier.dbus.object.Interface
 ---@param path glacier.dbus.type.ObjectPath
-local function MethodContext_new(connection, router, path, interface)
+local function MethodContext_new(connection, router, path, interface, message)
     return setmetatable({
         _weak = WeakMethodContext_new(connection, router, interface),
         _path = _types.object_path.from_str(path:get()),
         _emitter = _signal_emitter.new(connection, path),
+        _message = message,
     }, MethodContext)
 end
 
@@ -104,6 +106,10 @@ end
 
 function MethodContext:emitter()
     return self._emitter
+end
+
+function MethodContext:message()
+    return self._message
 end
 
 ---@class glacier.dbus.Object
@@ -311,7 +317,7 @@ function ObjectRouter:dispatch(connection, message)
         return message:reply_error(_errors.dbus.UnknownInterface, name)
     end
 
-    local ctx = MethodContext_new(connection, self, path, interface)
+    local ctx = MethodContext_new(connection, self, path, interface, message)
 
     return interface:call(ctx, message)
 end
