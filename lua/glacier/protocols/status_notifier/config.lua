@@ -1,0 +1,15 @@
+---@class glacier.status_notifier.config
+local config = {
+    protocol_version = 0,
+    ---@class glacier.status_notifier.config.watcher
+    watcher = {
+        ---Service Name
+        service = "org.kde.StatusNotifierWatcher",
+        ---Path to the Watcher object
+        object = "/StatusNotifierWatcher",
+        ---SNI Watcher interface
+        interface = "org.kde.StatusNotifierWatcher",
+    },
+}
+
+return config
