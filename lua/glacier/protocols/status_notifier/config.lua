@@ -16,6 +16,9 @@ local config = {
         ---SNI Item interface.
         interface = "org.kde.StatusNotifierItem",
     },
+    dbusmenu = {
+        interface = "com.canonical.dbusmenu",
+    },
 }
 
 return config
