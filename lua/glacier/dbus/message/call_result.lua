@@ -46,6 +46,14 @@ function CallError.__eq(lhs, rhs)
     return nil
 end
 
+function CallError:__tostring()
+    if self._message then
+        return ("%s: %s"):format(self:name_str(), self._message)
+    else
+        return "%s"
+    end
+end
+
 ---Result of a method call.
 ---@class glacier.dbus.message.CallResult
 ---@field _ok? glacier.dbus.type.Struct
