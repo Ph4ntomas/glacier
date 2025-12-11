@@ -10,6 +10,12 @@ local config = {
         ---SNI Watcher interface
         interface = "org.kde.StatusNotifierWatcher",
     },
+    items = {
+        ---Path to the Item object.
+        object = "/StatusNotifierItem",
+        ---SNI Item interface.
+        interface = "org.kde.StatusNotifierItem",
+    },
 }
 
 return config
