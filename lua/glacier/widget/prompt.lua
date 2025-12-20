@@ -197,7 +197,7 @@ function Prompt:new(config)
             spacing = 4.0,
         },
         style = {
-            background = Widget.background.Color(Widget.color.from_rgba(0, 0, 0, 0)),
+            background_color = Widget.color.from_rgba(0, 0, 0, 0),
             border = { width = 0 },
         },
         padding = { top = 0, bottom = 0 },

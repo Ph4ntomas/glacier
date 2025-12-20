@@ -3,7 +3,7 @@
 //! [`Prompt`]: crate::widget::prompt::Prompt
 
 use snowcap_api::widget::{
-    Background, Border, Color, Padding,
+    Border, Color, Padding,
     font::Font,
     text_input::{self, Icon},
 };
@@ -18,7 +18,7 @@ pub struct PromptStyle {
     /// [`Background`] used for the [`Prompt`].
     ///
     /// [`Prompt`]: super::Prompt
-    pub background: Option<Background>,
+    pub bg_color: Option<Color>,
     /// [`Border`] surrounding the [`Prompt`].
     ///
     /// [`Prompt`]: super::Prompt
@@ -130,14 +130,6 @@ impl Style {
         }
     }
 
-    /// Sets the [`Background`].
-    pub fn background(self, background: impl Into<Background>) -> Self {
-        Self {
-            default: self.default.background(background),
-            ..self
-        }
-    }
-
     /// Sets the [`Border`].
     pub fn border(self, border: Border) -> Self {
         Self {
@@ -214,15 +206,7 @@ impl PromptStyle {
     /// Sets the [`Background`] to a plain color.
     pub fn bg_color(self, bg_color: Color) -> Self {
         Self {
-            background: Some(bg_color.into()),
-            ..self
-        }
-    }
-
-    /// Sets the [`Background`].
-    pub fn background(self, background: impl Into<Background>) -> Self {
-        Self {
-            background: Some(background.into()),
+            bg_color: Some(bg_color),
             ..self
         }
     }
@@ -263,7 +247,7 @@ impl PromptStyle {
     pub fn apply_default(&self, default: &Self) -> Self {
         let PromptStyle {
             fg_color,
-            background,
+            bg_color,
             border,
             icon_color,
             placeholder_color,
@@ -272,7 +256,7 @@ impl PromptStyle {
 
         Self {
             fg_color: fg_color.or(default.fg_color),
-            background: background.or_else(|| default.background.clone()),
+            bg_color: bg_color.or(default.bg_color),
             border: border.or(default.border),
             icon_color: icon_color.or(default.icon_color),
             placeholder_color: placeholder_color.or(default.placeholder_color),
@@ -285,7 +269,7 @@ impl From<PromptStyle> for text_input::Style {
     fn from(value: PromptStyle) -> Self {
         let PromptStyle {
             fg_color,
-            background,
+            bg_color,
             border,
             icon_color,
             placeholder_color,
@@ -293,7 +277,7 @@ impl From<PromptStyle> for text_input::Style {
         } = value;
 
         Self {
-            background,
+            background_color: bg_color,
             border,
             icon: icon_color,
             placeholder: placeholder_color,
