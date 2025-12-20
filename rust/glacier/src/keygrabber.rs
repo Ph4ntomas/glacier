@@ -207,7 +207,7 @@ impl Handle {
                 return;
             }
 
-            self.start_impl(&mut *inner);
+            self.start_impl(&mut inner);
         }
 
         self.on_start();
@@ -219,7 +219,7 @@ impl Handle {
             let mut inner = self.0.lock().unwrap();
 
             if inner.handle.is_some() {
-                self.stop_impl(&mut *inner);
+                self.stop_impl(&mut inner);
             } else {
                 return;
             }
@@ -272,8 +272,8 @@ impl Handle {
     fn relocate(&self) {
         let mut inner = self.0.lock().unwrap();
 
-        self.stop_impl(&mut *inner);
-        self.start_impl(&mut *inner);
+        self.stop_impl(&mut inner);
+        self.start_impl(&mut inner);
     }
 
     fn start_impl(&self, inner: &mut Inner) {
@@ -336,8 +336,6 @@ impl Handle {
     fn stop_impl(&self, inner: &mut Inner) {
         if let Some(handle) = &inner.handle.take() {
             handle.close();
-        } else {
-            return;
         }
     }
 
