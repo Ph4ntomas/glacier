@@ -223,16 +223,19 @@ function Connection:_fallback_message_handler(message)
     end
 
     local matched = nil
-    for _, matchers in pairs(self.matchers) do
-        for _, matcher in ipairs(matchers) do
-            if matcher:match(message) then
-                if matcher.handler(self, message) then
-                    matched = true
+    local cq = assert(self._cqueues, "ERROR: cqueue not available")
+
+    cq:wrap(function()
+        for _, matchers in pairs(self.matchers) do
+            for _, matcher in ipairs(matchers) do
+                if matcher:match(message) then
+                    if matcher.handler(self, message) then
+                        matched = true
+                    end
                 end
             end
         end
-    end
-
+    end)
     return matched
 end
 
