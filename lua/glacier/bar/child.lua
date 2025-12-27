@@ -16,7 +16,7 @@ end
 ---
 ---@param msg any? Message sent to the child.
 ---@diagnostic disable-next-line:unused-local
-function Child:update(msg) end
+function Child:update(msg, bar) end
 
 function Child:__tostring()
     if self.viewfn then

@@ -197,7 +197,7 @@ function Bar:update_children(children, msg)
     children = children or {}
 
     for _, child in pairs(children) do
-        child:update(msg)
+        child:update(msg, self)
     end
 end
 
