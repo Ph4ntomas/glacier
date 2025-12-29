@@ -309,6 +309,9 @@ function Bar:process_children(children)
         [signals.request_unfocus] = function()
             self:send_message(oper.Unfocus())
         end,
+        [signals.send_message] = function(msg)
+            self:send_message(msg)
+        end,
     }
 
     for _, v in pairs(children) do
