@@ -19,6 +19,7 @@ use std::time::{Duration, Instant};
 use pinnacle_api::signal::TagSignal;
 use pinnacle_api::util::Batch;
 use pinnacle_api::{output::OutputHandle, tag::TagHandle};
+use snowcap_api::popup::Parent;
 use snowcap_api::widget::row::Row;
 use snowcap_api::widget::text::Text;
 use snowcap_api::widget::{WidgetDef, mouse_area};
@@ -410,7 +411,7 @@ where
         Some(widget.into())
     }
 
-    fn update(&mut self, msg: Self::Message) {
+    fn update(&mut self, msg: Self::Message, _parent: Option<Parent>) {
         let Some(msg) = msg.into() else {
             return;
         };

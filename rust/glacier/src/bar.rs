@@ -42,6 +42,7 @@ use std::{
 use pinnacle_api::output::OutputHandle;
 use snowcap_api::{
     layer::{self, KeyboardInteractivity, LayerHandle},
+    popup::{AsParent, Parent},
     widget::{self, Padding, Program, WidgetDef, container::Container, row::Row},
 };
 
@@ -381,12 +382,16 @@ where
             .collect()
     }
 
-    fn update_children(children: Arc<Mutex<Vec<Child<Msg>>>>, msg: BarMessage<Msg>) {
+    fn update_children(
+        children: Arc<Mutex<Vec<Child<Msg>>>>,
+        msg: BarMessage<Msg>,
+        parent: Option<Parent>,
+    ) {
         children
             .lock()
             .unwrap()
             .iter_mut()
-            .for_each(move |c| c.update(msg.clone()))
+            .for_each(move |c| c.update(msg.clone(), parent))
     }
 }
 
@@ -471,10 +476,17 @@ where
         let first = bar.state.lock().unwrap().first.clone();
         let center = bar.state.lock().unwrap().center.clone();
         let last = bar.state.lock().unwrap().last.clone();
+        let parent = bar
+            .state
+            .lock()
+            .unwrap()
+            .handle
+            .as_ref()
+            .map(AsParent::as_parent);
 
-        Self::update_children(first, msg.clone());
-        Self::update_children(center, msg.clone());
-        Self::update_children(last, msg.clone());
+        Self::update_children(first, msg.clone(), parent);
+        Self::update_children(center, msg.clone(), parent);
+        Self::update_children(last, msg.clone(), parent);
     }
 }
 

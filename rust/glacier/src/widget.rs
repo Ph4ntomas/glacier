@@ -22,7 +22,7 @@
 
 use std::sync::{Arc, Mutex, Weak};
 
-use snowcap_api::widget::WidgetDef;
+use snowcap_api::{popup::Parent, widget::WidgetDef};
 
 use crate::signal::{Emitter, TryWithEmitter};
 
@@ -86,8 +86,9 @@ pub trait Widget: TryWithEmitter {
 
     fn view(&self) -> Option<snowcap_api::widget::WidgetDef<Self::Message>>;
 
-    fn update(&mut self, msg: Self::Message) {
+    fn update(&mut self, msg: Self::Message, parent: Option<Parent>) {
         let _ = msg;
+        let _ = parent;
     }
 }
 
@@ -143,7 +144,7 @@ where
         self.0.lock().unwrap().view()
     }
 
-    fn update(&mut self, msg: Self::Message) {
-        self.0.lock().unwrap().update(msg)
+    fn update(&mut self, msg: Self::Message, parent: Option<Parent>) {
+        self.0.lock().unwrap().update(msg, parent)
     }
 }

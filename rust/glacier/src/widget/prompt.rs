@@ -15,11 +15,14 @@
 
 use std::marker::PhantomData;
 
-use snowcap_api::widget::{
-    Alignment, Border, Length, Padding,
-    container::Container,
-    font,
-    text_input::{Icon, TextInput},
+use snowcap_api::{
+    popup::Parent,
+    widget::{
+        Alignment, Border, Length, Padding,
+        container::Container,
+        font,
+        text_input::{Icon, TextInput},
+    },
 };
 
 use crate::{
@@ -271,7 +274,7 @@ where
         Some(prompt.into())
     }
 
-    fn update(&mut self, msg: Self::Message) {
+    fn update(&mut self, msg: Self::Message, _parent: Option<Parent>) {
         use operation::{Focusable::Unfocus, Operation::Focusable};
 
         let Some(msg) = msg.into() else {

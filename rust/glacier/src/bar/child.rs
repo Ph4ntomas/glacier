@@ -1,5 +1,5 @@
 //! Bar children.
-use snowcap_api::widget::WidgetDef;
+use snowcap_api::{popup::Parent, widget::WidgetDef};
 
 use crate::{
     signal::TryWithEmitter,
@@ -27,9 +27,9 @@ where
     Msg: Clone,
 {
     /// Calls update on stateful widgets.
-    fn update_inner(&mut self, msg: BarMessage<Msg>) {
+    fn update_inner(&mut self, msg: BarMessage<Msg>, parent: Option<Parent>) {
         if let Self::Widget(w) = self {
-            w.update(msg)
+            w.update(msg, parent)
         }
     }
 
@@ -42,10 +42,10 @@ where
     }
 
     /// Update held [`Widget`].
-    pub(crate) fn update(&mut self, msg: BarMessage<Msg>) {
+    pub(crate) fn update(&mut self, msg: BarMessage<Msg>, parent: Option<Parent>) {
         match msg {
             BarMessage::Empty => {}
-            _ => self.update_inner(msg),
+            _ => self.update_inner(msg, parent),
         }
     }
 }
