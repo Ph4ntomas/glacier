@@ -15,8 +15,9 @@ end
 ---Update this `Child` internal state.
 ---
 ---@param msg any? Message sent to the child.
+---@param parent glacier.Surface
 ---@diagnostic disable-next-line:unused-local
-function Child:update(msg, bar) end
+function Child:update(msg, parent) end
 
 function Child:__tostring()
     if self.viewfn then

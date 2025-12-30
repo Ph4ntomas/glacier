@@ -30,8 +30,9 @@ function Base:view() end
 ---Update the widget internal state
 ---
 ---@param msg any The message to update the widget with.
+---@param parent glacier.Surface The surface this widget is displayed on.
 ---@diagnostic disable-next-line
-function Base:update(msg) end
+function Base:update(msg, parent) end
 
 ---This function will emit `"widget::redraw_needed"`.
 function Base:refresh()

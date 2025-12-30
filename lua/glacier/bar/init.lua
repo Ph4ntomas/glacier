@@ -65,7 +65,7 @@ local bar = { mt = {} }
 --- - Bar position and orientation.
 --- - Advanced keyboard interaction for widgets.
 ---
----@class glacier.bar.Bar: snowcap.widget.Program
+---@class glacier.bar.Bar: snowcap.widget.Program,glacier.Surface
 ---@field style glacier.bar.Style Bar style
 ---@field first_view glacier.bar.ViewFn Function to call to render the first block.
 ---@field center_view glacier.bar.ViewFn Function to call to render the central block.
@@ -413,6 +413,12 @@ function Bar:new(config)
     end
 
     return bar
+end
+
+---Get the bar's handle.
+---@return snowcap.layer.LayerHandle
+function Bar:get_handle()
+    return self.handle
 end
 
 bar.Bar = Bar
