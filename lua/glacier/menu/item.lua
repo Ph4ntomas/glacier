@@ -104,7 +104,7 @@ function _item.item_style_for_state(style, state)
 end
 
 ---@alias glacier.menu.item.ViewFn fun(self: self, active: boolean, style: glacier.menu.item.Style): snowcap.widget.WidgetDef?
----@alias glacier.menu.item.UpdateFn fun(self: self, message: any, surface: glacier.Surface): glacier.menu.Message?
+---@alias glacier.menu.item.UpdateFn fun(self: self, message: any, surface: glacier.Surface)
 ---@alias glacier.menu.item.ActivateFn fun(self: self, hover: boolean): glacier.menu.Message?
 ---@alias glacier.menu.item.DeactivateFn fun(self: self)
 ---@alias glacier.menu.item.SubmitFn fun(self: self): glacier.menu.Message?

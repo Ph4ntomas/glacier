@@ -165,6 +165,7 @@ function menu.default_view(items, style)
         }),
         width = style.width,
         height = style.height,
+        padding = style.padding,
         style = {
             background_color = style.bg_color,
             border = style.border,
@@ -416,6 +417,7 @@ function Menu:_open_submenu()
 
         submenu._popup_config = require("snowcap.util").deep_copy(self._child_popup_config)
         submenu._child_popup_config = require("snowcap.util").deep_copy(self._child_popup_config)
+        submenu._style = require("snowcap.util").deep_copy(self._style)
         submenu:set_item_style(self._item_style)
         submenu:set_key_config(self._key_config)
 
