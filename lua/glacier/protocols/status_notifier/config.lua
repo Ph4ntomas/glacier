@@ -12,7 +12,7 @@ local config = {
     },
     host = {
         ---Service Name prefix.
-        service_prefix = "org.kde.StartupNotifierHost",
+        service_prefix = "org.kde.StatusNotifierHost",
         ---Path prefix to the Watcher object
         object_prefix = "/StatusNotifierHost",
         ---SNI Host interface.
