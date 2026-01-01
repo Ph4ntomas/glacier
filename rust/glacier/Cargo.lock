@@ -468,6 +468,7 @@ dependencies = [
  "glacier-derive",
  "pinnacle-api",
  "regex",
+ "serde",
  "snowcap-api",
  "tokio",
  "tracing",
