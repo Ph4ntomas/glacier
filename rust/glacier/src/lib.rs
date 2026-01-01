@@ -15,6 +15,11 @@ pub mod misc {
     pub mod separator;
 }
 
+/// Protocols implementation.
+pub mod protocols {
+    pub mod status_notifier;
+}
+
 #[doc(inline)]
 pub use keygrabber::KeyGrabber;
 
