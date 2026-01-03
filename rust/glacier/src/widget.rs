@@ -50,7 +50,7 @@ pub use textbox::TextBox;
 ///
 /// If your type can be used with built-in widget, it should be convertible to an from
 /// [`WidgetMessage`] by implementing [`From<WidgetMessage>`] and [`Into<Option<WidgetMessage>>`].
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum WidgetMessage {
     Operation(operation::Operation),
     TagList(taglist::Message),

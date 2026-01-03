@@ -17,3 +17,6 @@ pub struct RequestFocus(pub String);
 /// Request the containing layer to drop focus.
 #[derive(Clone, Copy, Debug, Signal)]
 pub struct RequestUnfocus;
+
+#[derive(Clone, Debug, Signal)]
+pub struct Message<Msg>(pub Msg);

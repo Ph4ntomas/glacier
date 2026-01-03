@@ -306,6 +306,21 @@ where
                     HandlerPolicy::Keep
                 }
             });
+
+            emitter.connect({
+                let weak = self.downgrade();
+                move |signal::Message(msg)| {
+                    let Some(bar) = weak.upgrade() else {
+                        return HandlerPolicy::Discard;
+                    };
+
+                    if let Some(handle) = bar.get_layer() {
+                        handle.send_message(msg);
+                    }
+
+                    HandlerPolicy::Keep
+                }
+            });
         }
         child
     }
