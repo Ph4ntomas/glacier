@@ -9,10 +9,11 @@ use syn::{DeriveInput, parse_macro_input};
 pub fn derive_signal(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let name = input.ident;
 
     let expanded = quote! {
-        impl Signal for #name{
+        impl #impl_generics Signal for #name #ty_generics #where_clause {
             fn signal_name() -> & 'static str {
                 concat!(module_path!(), "::", stringify!(#name))
             }
