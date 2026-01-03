@@ -34,6 +34,7 @@ pub mod signal;
 pub mod base;
 pub mod clock;
 pub mod prompt;
+pub mod systray;
 pub mod taglist;
 pub mod textbox;
 
@@ -41,6 +42,8 @@ pub mod textbox;
 pub use clock::{Clock, LocalClock};
 #[doc(inline)]
 pub use prompt::Prompt;
+#[doc(inline)]
+pub use systray::SysTray;
 #[doc(inline)]
 pub use taglist::TagList;
 #[doc(inline)]
@@ -55,6 +58,7 @@ pub enum WidgetMessage {
     Operation(operation::Operation),
     TagList(taglist::Message),
     Prompt(prompt::Message),
+    SysTray(systray::Message),
 }
 
 /// Stateless, functional style widget.
