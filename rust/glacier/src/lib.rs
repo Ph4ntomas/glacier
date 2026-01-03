@@ -1,5 +1,6 @@
 pub mod bar;
 pub mod keygrabber;
+pub mod logging;
 pub mod modal;
 pub mod signal;
 pub mod util;
