@@ -129,7 +129,9 @@ pub trait WithEmitter {
 /// without it should prefer dealing with implementation of this trait.
 pub trait TryWithEmitter {
     /// Returns the [`Emitter`], if any.
-    fn try_with_emitter(&self) -> Option<Emitter>;
+    fn try_with_emitter(&self) -> Option<Emitter> {
+        None
+    }
 }
 
 impl Emitter {
