@@ -68,7 +68,7 @@ local function LayoutNode_new(id, properties, children)
         ["label"] = "",
         ["enabled"] = true,
         ["visible"] = true,
-        ["icon-name"] = true,
+        ["icon-name"] = "",
         ["icon-data"] = nil,
         ["shortcut"] = {},
         ["toggle-type"] = "",
