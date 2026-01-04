@@ -16,6 +16,9 @@ No effort is currently made to maintain a stable API. I'm targeting Pinnacle's m
 own PR on top. Since these PR are inherently unstable until merged, it wouldn't make any sense to
 try to have a stable API.
 
+The DBus wrapper for lua is working, but is highly experimental. It also depends on ldbus, whose 
+rockspec cannot be installed normally. See https://github.com/daurnimator/ldbus for more information.
+
 ## Features
 
 - A Bar to host widget
@@ -24,6 +27,9 @@ try to have a stable API.
 - Signals
 - An input grabbing API
 - Modal behavior
+- A zbus inspired dbus library for lua integrated within cqueues.
+- StatusNotifierItem implementation.
+- Menus
 - Other goodies
 
 ## Feature Requests, Bug Reports, Contributions & Questions
