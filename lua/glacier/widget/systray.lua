@@ -198,12 +198,12 @@ _systray.Action = {
     end,
 }
 
----@class glacier.widget.systray.ItemStyle
+---@class glacier.widget.systray.IconStyle
 ---@field border? snowcap.widget.Border
 ---@field padding? snowcap.widget.Padding
 ---@field bg_color? snowcap.widget.Color
 
-local _item_style_keys = {
+local _icon_style_keys = {
     border = 1,
     padding = 1,
     bg_color = 1,
@@ -214,10 +214,10 @@ local _item_style_keys = {
 ---@field border? snowcap.widget.Border Border around the whole systray.
 ---@field spacing? number Spacing between items
 ---@field padding? snowcap.widget.Padding Padding for the whole row of items.
----@field active? glacier.widget.systray.ItemStyle Style
----@field hovered? glacier.widget.systray.ItemStyle
----@field active_hovered? glacier.widget.systray.ItemStyle Style
----@field default? glacier.widget.systray.ItemStyle
+---@field active? glacier.widget.systray.IconStyle Style
+---@field hovered? glacier.widget.systray.IconStyle
+---@field active_hovered? glacier.widget.systray.IconStyle Style
+---@field default? glacier.widget.systray.IconStyle
 
 ---@return glacier.widget.systray.Style
 function systray.default_style()
@@ -242,7 +242,7 @@ end
 
 ---@package
 ---@param style glacier.widget.systray.Style
----@return glacier.widget.systray.ItemStyle
+---@return glacier.widget.systray.IconStyle
 function _systray._get_active_style(style)
     if not style.active then
         return style.default
@@ -257,7 +257,7 @@ end
 
 ---@package
 ---@param style glacier.widget.systray.Style
----@return glacier.widget.systray.ItemStyle
+---@return glacier.widget.systray.IconStyle
 function _systray._get_hovered_style(style)
     if not style.hovered then
         return style.default
@@ -272,28 +272,28 @@ end
 
 ---@package
 ---@param style glacier.widget.systray.Style
----@return glacier.widget.systray.ItemStyle
+---@return glacier.widget.systray.IconStyle
 function _systray._get_active_hovered_style(style)
     local active = style.active or {}
     local hovered = style.hovered or {}
     local active_hovered = style.active_hovered or {}
 
-    ---@type glacier.widget.systray.ItemStyle
-    local item_style = {}
+    ---@type glacier.widget.systray.IconStyle
+    local icon_style = {}
 
-    for k, _ in pairs(_item_style_keys) do
-        item_style[k] = active_hovered[k] or active[k] or hovered[k] or style.default[k]
+    for k, _ in pairs(_icon_style_keys) do
+        icon_style[k] = active_hovered[k] or active[k] or hovered[k] or style.default[k]
     end
 
-    return item_style
+    return icon_style
 end
 
 ---@package
 ---@param style glacier.widget.systray.Style
 ---@param active boolean
 ---@param hovered boolean
----@return glacier.widget.systray.ItemStyle
-function _systray.get_item_style(style, active, hovered)
+---@return glacier.widget.systray.IconStyle
+function _systray.get_icon_style(style, active, hovered)
     if active and hovered then
         return _systray._get_active_hovered_style(style)
     elseif active then
@@ -325,11 +325,11 @@ function systray.default_view(children, style)
     })
 end
 
----@alias glacier.widget.systray.ItemViewFn fun(item: glacier.status_notifier.host.Item, style: glacier.widget.systray.ItemStyle): snowcap.widget.WidgetDef?
+---@alias glacier.widget.systray.IconViewFn fun(item: glacier.status_notifier.host.Item, style: glacier.widget.systray.IconStyle): snowcap.widget.WidgetDef?
 
 ---@param item glacier.status_notifier.host.Item
----@param style glacier.widget.systray.ItemStyle
-function systray.default_item_view(item, style)
+---@param style glacier.widget.systray.IconStyle
+function systray.default_icon_view(item, style)
     local icon_name = item.icon_name
     local path = item.icon_theme_path .. "/" .. icon_name .. ".png"
 
@@ -355,35 +355,35 @@ end
 ---@field private _menu? glacier.menu.Menu
 ---@field private _menu_signals? glacier.menu.MenuSignals
 ---@field private _view_fn? glacier.widget.systray.ViewFn
----@field private _item_view_fn? glacier.widget.systray.ItemViewFn
+---@field private _icon_view_fn? glacier.widget.systray.IconViewFn
 ---@field private _style glacier.widget.systray.Style
 local SysTray = Base:new_class({ type = "SysTray" })
 
-function SysTray:_view_item(key, item)
+function SysTray:_view_icon(key, item)
     local id = item.id
 
-    local item_style =
-        _systray.get_item_style(self._style, self._active == key, self._hovered == key)
-    local item_view
-    if self._item_view_fn then
+    local icon_style =
+        _systray.get_icon_style(self._style, self._active == key, self._hovered == key)
+    local icon_view
+    if self._icon_view_fn then
         local ok
-        ok, item_view = pcall(self._item_view_fn, item, item_style)
+        ok, icon_view = pcall(self._icon_view_fn, item, icon_style)
 
         if not ok then
             Log.error(
-                ("While calling view function for item %s: %s"):format(item.id, tostring(item_view))
+                ("While calling view function for item %s: %s"):format(item.id, tostring(icon_view))
             )
         end
     else
-        item_view = systray.default_item_view(item, item_style)
+        icon_view = systray.default_icon_view(item, icon_style)
     end
 
-    if not item_view then
+    if not icon_view then
         return nil
     end
 
     local marea = Widget.mouse_area({
-        child = item_view,
+        child = icon_view,
         on_release = {
             widget_id = self:id(),
             action = _systray.Action.Activate(key),
@@ -408,7 +408,7 @@ function SysTray:view()
     local children = {}
 
     for k, item in pairs(self._host:items()) do
-        local child = self:_view_item(k, item)
+        local child = self:_view_icon(k, item)
         table.insert(children, child)
     end
 
@@ -494,7 +494,7 @@ end
 ---@field menu_config? glacier.menu.Config
 ---@field style? glacier.widget.systray.Style
 ---@field view_fn? glacier.widget.systray.ViewFn
----@field item_view_fn? glacier.widget.systray.ItemViewFn
+---@field icon_view_fn? glacier.widget.systray.IconViewFn
 
 ---@param config glacier.widget.systray.Config
 ---@return glacier.widget.systray.SysTray
@@ -523,7 +523,7 @@ function SysTray:new(config)
         _menu_config = config.menu_config,
         _style = config.style,
         _view_fn = config.view_fn,
-        _item_view_fn = config.item_view_fn,
+        _icon_view_fn = config.icon_view_fn,
     })
 
     local id = ret:id()
