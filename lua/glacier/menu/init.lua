@@ -18,8 +18,8 @@ local _signal = {
 }
 menu.signal = _signal
 
-local _item = require("glacier.menu.item")
-menu.item = _item
+local _entry = require("glacier.menu.entry")
+menu.entry = _entry
 
 local _action = require("glacier.menu.action")
 menu.action = _action
@@ -151,16 +151,16 @@ function menu.default_key_config()
     }
 end
 
----@alias glacier.menu.ViewFn fun(items: snowcap.widget.WidgetDef[], style: glacier.menu.Style): snowcap.widget.WidgetDef
+---@alias glacier.menu.ViewFn fun(entries: snowcap.widget.WidgetDef[], style: glacier.menu.Style): snowcap.widget.WidgetDef
 
 ---Default Menu view
----@param items snowcap.widget.WidgetDef[]
+---@param entries snowcap.widget.WidgetDef[]
 ---@param style glacier.menu.Style
 ---@return snowcap.widget.WidgetDef
-function menu.default_view(items, style)
+function menu.default_view(entries, style)
     return Widget.container({
         child = Widget.column({
-            children = items,
+            children = entries,
             spacing = style.spacing,
         }),
         width = style.width,
@@ -178,8 +178,8 @@ end
 ---@field private _popup_config glacier.menu.PopupConfig
 ---@field private _child_popup_config glacier.menu.PopupConfig
 ---@field private _view_fn? glacier.menu.ViewFn
----@field private _items glacier.menu.Item[]
----@field private _item_indices table<string, integer>
+---@field private _entries glacier.menu.Entry[]
+---@field private _entry_indices table<string, integer>
 ---@field private _active_idx integer?
 ---@field private _submenu glacier.menu.Menu?
 ---@field private _submenu_signals? glacier.menu.MenuSignals
@@ -188,39 +188,39 @@ end
 ---@field private _handle? snowcap.popup.PopupHandle
 ---@field private _key_config glacier.menu.KeyConfig
 ---@field private _style glacier.menu.Style
----@field private _item_style glacier.menu.item.Style
+---@field private _entry_style glacier.menu.entry.Style
 local Menu = {}
 Menu.__index = Menu
 Menu.__name = "glacier.Menu"
 
-function Menu:_view_items()
-    local item_views = {}
+function Menu:_view_entries()
+    local entry_views = {}
 
-    for idx, item in ipairs(self._items) do
-        local child = item:view(self._active_idx == idx, self._item_style)
+    for idx, entry in ipairs(self._entries) do
+        local child = entry:view(self._active_idx == idx, self._entry_style)
 
         local mouse_area = {
             child = child,
         }
 
-        if not item:disabled() then
-            mouse_area.on_enter = _action.item.Enter(item)
-            mouse_area.on_release = _action.item.Submit()
+        if not entry:disabled() then
+            mouse_area.on_enter = _action.entry.Enter(entry)
+            mouse_area.on_release = _action.entry.Submit()
         end
 
-        local item_view = Widget.container({
-            id = item:key(),
+        local entry_view = Widget.container({
+            id = entry:key(),
             child = Widget.mouse_area(mouse_area),
         })
 
-        table.insert(item_views, item_view)
+        table.insert(entry_views, entry_view)
     end
 
-    return item_views
+    return entry_views
 end
 
 function Menu:view()
-    local children = self:_view_items()
+    local children = self:_view_entries()
 
     if self._view_fn then
         return self._view_fn(children, self._style)
@@ -230,11 +230,11 @@ function Menu:view()
 end
 
 ----------------------
--- Items Handling   --
+-- Entries Handling --
 ----------------------
 
 function Menu:_next()
-    if #self._items == 0 then
+    if #self._entries == 0 then
         self._active_idx = nil
         return
     end
@@ -242,23 +242,23 @@ function Menu:_next()
     if self._active_idx then
         local start = self._active_idx + 1
 
-        for idx = start, #self._items do
-            if not self._items[idx]:disabled() then
-                return self:_activate_item(idx)
+        for idx = start, #self._entries do
+            if not self._entries[idx]:disabled() then
+                return self:_activate_entry(idx)
             end
         end
     end
 
     local start = 1
-    local end_idx = #self._items
+    local end_idx = #self._entries
 
     for idx = start, end_idx do
         if idx == self._active_idx then
             return nil
         end
 
-        if not self._items[idx]:disabled() then
-            return self:_activate_item(idx)
+        if not self._entries[idx]:disabled() then
+            return self:_activate_entry(idx)
         end
     end
 
@@ -266,7 +266,7 @@ function Menu:_next()
 end
 
 function Menu:_previous()
-    if #self._items == 0 then
+    if #self._entries == 0 then
         self._active_idx = nil
         return
     end
@@ -275,71 +275,71 @@ function Menu:_previous()
         local start = self._active_idx - 1
 
         for idx = start, 1, -1 do
-            if not self._items[idx]:disabled() then
-                return self:_activate_item(idx)
+            if not self._entries[idx]:disabled() then
+                return self:_activate_entry(idx)
             end
         end
     end
 
-    local start = #self._items
+    local start = #self._entries
     for idx = start, 1, -1 do
         if idx == self._active_idx then
             return nil
         end
 
-        if not self._items[idx]:disabled() then
-            return self:_activate_item(idx)
+        if not self._entries[idx]:disabled() then
+            return self:_activate_entry(idx)
         end
     end
 
     return nil
 end
 
-function Menu:_active_item()
+function Menu:_active_entry()
     local idx = self._active_idx
 
-    return idx and self._items[idx]
+    return idx and self._entries[idx]
 end
 
-function Menu:_activate_item(idx, hover)
-    local item = self._items[idx]
+function Menu:_activate_entry(idx, hover)
+    local entry = self._entries[idx]
 
-    if not item or item:disabled() then
+    if not entry or entry:disabled() then
         return nil
     end
 
     if self._active_idx ~= idx then
-        self:_deactivate_item()
+        self:_deactivate_entry()
     end
 
     self._active_idx = idx
 
-    if not item.activate then
+    if not entry.activate then
         return
     end
 
     local ok, ret = pcall(function()
-        return item:activate(hover or false)
+        return entry:activate(hover or false)
     end)
 
     if not ok then
-        Log.error(("While calling 'item:activate()': %s"):format(tostring(ret)))
+        Log.error(("While calling 'entry:activate()': %s"):format(tostring(ret)))
         return nil
     end
 
     return ret
 end
 
-function Menu:_deactivate_item()
-    local item = self:_active_item()
-    if item and not item:disabled() then
-        if item.deactivate then
+function Menu:_deactivate_entry()
+    local entry = self:_active_entry()
+    if entry and not entry:disabled() then
+        if entry.deactivate then
             local ok, err = pcall(function()
-                item:deactivate()
+                entry:deactivate()
             end)
 
             if not ok then
-                Log.error(("While calling 'item:deactivate': %s"):format(tostring(err)))
+                Log.error(("While calling 'entry:deactivate': %s"):format(tostring(err)))
             end
         end
     end
@@ -348,27 +348,27 @@ function Menu:_deactivate_item()
     self._active_idx = nil
 end
 
-function Menu:_submit_item()
-    local item = self:_active_item()
-    if not item or item:disabled() or not item.submit then
+function Menu:_submit_entry()
+    local entry = self:_active_entry()
+    if not entry or entry:disabled() or not entry.submit then
         return nil
     end
 
     local ok, submit_ret = pcall(function()
-        return item:submit()
+        return entry:submit()
     end)
     if not ok then
-        Log.error(("While calling 'item:submit()': %s"):format(tostring(submit_ret)))
+        Log.error(("While calling 'entry:submit()': %s"):format(tostring(submit_ret)))
         return
     end
 
     return submit_ret
 end
 
-function Menu:set_item_style(style)
+function Menu:set_entry_style(style)
     style = style or {}
 
-    self._item_style = require("glacier.utils").merge_table(_item.default_style(), style)
+    self._entry_style = require("glacier.utils").merge_table(_entry.default_style(), style)
 end
 
 ----------------------
@@ -389,23 +389,25 @@ function Menu:_close_submenu()
 end
 
 function Menu:_open_submenu()
-    local item = self:_active_item()
-    if not item or item:disabled() or not item.open_menu then
+    local entry = self:_active_entry()
+    if not entry or entry:disabled() or not entry.open_menu then
         return
     end
 
-    local key = item:key()
+    local key = entry:key()
     if not key then
-        Log.error(("Could not open submenu for '%s': No key"):format(tostring(item)))
+        Log.error(("Could not open submenu for '%s': No key"):format(tostring(entry)))
         return
     end
 
     local ok, submenu = pcall(function()
-        return item:open_menu()
+        return entry:open_menu()
     end)
 
     if not ok then
-        Log.error(("Could not open submenu for '%s': %s"):format(tostring(item), tostring(submenu)))
+        Log.error(
+            ("Could not open submenu for '%s': %s"):format(tostring(entry), tostring(submenu))
+        )
         return
     end
 
@@ -418,7 +420,7 @@ function Menu:_open_submenu()
         submenu._popup_config = require("snowcap.util").deep_copy(self._child_popup_config)
         submenu._child_popup_config = require("snowcap.util").deep_copy(self._child_popup_config)
         submenu._style = require("snowcap.util").deep_copy(self._style)
-        submenu:set_item_style(self._item_style)
+        submenu:set_entry_style(self._entry_style)
         submenu:set_key_config(self._key_config)
 
         ---@type glacier.menu.PopupConfig
@@ -451,15 +453,15 @@ end
 -- Surface Method   --
 ----------------------
 
-function Menu:_update_items(msg)
-    for _, item in ipairs(self._items) do
-        if item.update then
+function Menu:_update_entries(msg)
+    for _, entry in ipairs(self._entries) do
+        if entry.update then
             local ok, ret = pcall(function()
-                return item:update(msg, self)
+                return entry:update(msg, self)
             end)
 
             if not ok then
-                Log.error(("During a call to Item:update(): %s"):format(tostring(ret)))
+                Log.error(("During a call to Entry:update(): %s"):format(tostring(ret)))
             elseif ret ~= nil then
                 return ret
             end
@@ -477,7 +479,7 @@ function Menu:update(msg)
     while msg do
         local next_msg
         if not message.type(msg) == message.TYPE_NAME then
-            next_msg = self:_update_items(msg)
+            next_msg = self:_update_entries(msg)
         else
             ---@cast msg glacier.menu.Message
 
@@ -485,12 +487,12 @@ function Menu:update(msg)
                 next_msg = self:_next()
             elseif msg.action == _action.menu.PREV then
                 next_msg = self:_previous()
-            elseif msg.action == _action.item.ENTER then
-                local idx = self._item_indices[msg.item]
-                next_msg = self:_activate_item(idx, true)
-            elseif msg.action == _action.item.SUBMIT then
-                next_msg = self:_submit_item()
-            elseif msg.action == _action.item.OPEN_MENU then
+            elseif msg.action == _action.entry.ENTER then
+                local idx = self._entry_indices[msg.entry]
+                next_msg = self:_activate_entry(idx, true)
+            elseif msg.action == _action.entry.SUBMIT then
+                next_msg = self:_submit_entry()
+            elseif msg.action == _action.entry.OPEN_MENU then
                 self:_open_submenu()
             elseif msg.action == _action.menu.CLOSE_SUB then
                 self:_close_submenu()
@@ -579,9 +581,9 @@ function Menu:show(parent, direction, config)
             elseif prev[event.key] then
                 self._handle:send_message(_action.menu.Prev())
             elseif submit[event.key] then
-                self._handle:send_message(_action.item.Submit())
+                self._handle:send_message(_action.entry.Submit())
             elseif open_menu[event.key] then
-                self._handle:send_message(_action.item.OpenMenu())
+                self._handle:send_message(_action.entry.OpenMenu())
             elseif close_menu[event.key] then
                 self:emit(_signal.REQUEST_CLOSE)
             end
@@ -682,7 +684,7 @@ function Menu:new(config)
         popup_config = {},
         child_popup_config = {},
         view_fn = nil,
-        items = {},
+        entries = {},
         style = {
             bg_color = color.from_hex("#2b2b2b"),
             width = Widget.length.Fixed(250),
@@ -694,7 +696,7 @@ function Menu:new(config)
                 width = 0,
             },
         },
-        item_style = _item.default_style(),
+        entry_style = _entry.default_style(),
     }
 
     ---@type glacier.menu.Config
@@ -708,29 +710,32 @@ function Menu:new(config)
         _child_popup_config = config.child_popup_config,
         _view_fn = config.view_fn,
         _emitter = signal.emitter(),
-        _items = {},
-        _item_indices = {},
+        _entries = {},
+        _entry_indices = {},
         _active_idx = nil,
         _submenu = nil,
         _submenu_signals = {},
         _current_direction = config.direction or _direction.DownRight,
         _key_config = menu.default_key_config(),
         _style = config.style,
-        _item_style = config.item_style,
+        _entry_style = config.entry_style,
     }
 
-    config.items = config.items or {}
-    for k, item in ipairs(config.items) do
-        if not item:key() then
-            local key = ("#%d-%s"):format(k, string.gsub(item:label() or "UNNAMED", " ", "-") or "")
-            item:set_key(key)
+    config.entries = config.entries or {}
+    for k, entry in ipairs(config.entries) do
+        if not entry:key() then
+            local key = ("#%d-%s"):format(
+                k,
+                string.gsub(entry:label() or "UNNAMED", " ", "-") or ""
+            )
+            entry:set_key(key)
         end
 
-        table.insert(menu._items, item)
-        local key = item:key()
+        table.insert(menu._entries, entry)
+        local key = entry:key()
 
         if key then
-            menu._item_indices[key] = #menu._items
+            menu._entry_indices[key] = #menu._entries
         end
     end
 
@@ -761,8 +766,8 @@ menu.Menu = Menu
 ---@field view_fn? glacier.menu.ViewFn
 ---@field key_config? glacier.menu.KeyConfig
 ---@field style? glacier.menu.Style
----@field item_style? glacier.menu.item.Style
----@field items? glacier.menu.Item[]
+---@field entry_style? glacier.menu.entry.Style
+---@field entries? glacier.menu.Entry[]
 
 ---@param ... glacier.menu.Config
 ---@return glacier.menu.Menu
@@ -771,8 +776,8 @@ function menu.mt:__call(...)
 end
 
 ---@class glacier.menu.MenuDesc
----@field [1] string The item label. Set to an empty string to create a separator.
----@field [2]? glacier.menu.item.SubmitFn|glacier.menu.MenuDesc[] Either the function to call on
+---@field [1] string The entry label. Set to an empty string to create a separator.
+---@field [2]? glacier.menu.entry.SubmitFn|glacier.menu.MenuDesc[] Either the function to call on
 ---submit, or an array of descriptors for a submenu.
 
 ---Automatically create a menu from a simplified descriptor.
@@ -782,31 +787,31 @@ end
 ---@return glacier.menu.Menu
 function menu.auto_menu(desc, config)
     config = config or {}
-    config.items = nil
+    config.entries = nil
 
-    local items = {}
+    local entries = {}
     for _, v in ipairs(desc) do
         local label = v[1]
         local action = v[2]
         local act_type = type(action)
 
         if label == "" then
-            table.insert(items, _item.separator())
+            table.insert(entries, _entry.separator())
         elseif act_type == "function" or act_type == "nil" then
-            table.insert(items, _item.simple_item(label, action))
+            table.insert(entries, _entry.simple_entry(label, action))
         elseif act_type == "table" then
             local subconfig = require("snowcap.util").deep_copy(config)
             local on_open = function(_)
                 return menu.auto_menu(action, subconfig)
             end
 
-            table.insert(items, _item.simple_menu(label, on_open))
+            table.insert(entries, _entry.simple_menu(label, on_open))
         else
             error("Invalid MenuDesc")
         end
     end
 
-    config.items = items
+    config.entries = entries
     return Menu:new(config)
 end
 

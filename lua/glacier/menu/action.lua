@@ -5,35 +5,35 @@ local Message = message.Message
 ---@class glacier.menu.action
 local action = {}
 
----@enum glacier.menu.action.Item
-action.item = {
-    ENTER = "item::enter",
-    --LEAVE = "item::leave",
-    SUBMIT = "item::submit",
-    OPEN_MENU = "item::open_menu",
+---@enum glacier.menu.action.Entry
+action.entry = {
+    ENTER = "entry::enter",
+    --LEAVE = "entry::leave",
+    SUBMIT = "entry::submit",
+    OPEN_MENU = "entry::open_menu",
 
-    ---Emitted when an item's mouse_area is entered.
-    ---@param item glacier.menu.Item
+    ---Emitted when an entry's mouse_area is entered.
+    ---@param entry glacier.menu.Entry
     ---@return glacier.menu.Message
-    Enter = function(item)
+    Enter = function(entry)
         return Message.new({
-            action = action.item.ENTER,
-            item = item:key(),
+            action = action.entry.ENTER,
+            entry = entry:key(),
         })
     end,
 
-    ---Emitted when an item's should be submitted.
+    ---Emitted when an entry's should be submitted.
     ---@return glacier.menu.Message
     Submit = function()
         return Message.new({
-            action = action.item.SUBMIT,
+            action = action.entry.SUBMIT,
         })
     end,
 
-    ---Emitted when an item's menu should be opened.
+    ---Emitted when an entry's menu should be opened.
     OpenMenu = function()
         return Message.new({
-            action = action.item.OPEN_MENU,
+            action = action.entry.OPEN_MENU,
         })
     end,
 }
@@ -45,14 +45,14 @@ action.menu = {
     CLOSE_SUB = "menu::close_submenu",
     CLOSE = "menu::close",
 
-    ---Emitted when the previous item should be selected.
+    ---Emitted when the previous entry should be selected.
     ---@return glacier.menu.Message
     Prev = function()
         return Message.new({
             action = action.menu.PREV,
         })
     end,
-    ---Emitted when the next item should be selected.
+    ---Emitted when the next entry should be selected.
     ---@return glacier.menu.Message
     Next = function()
         return Message.new({

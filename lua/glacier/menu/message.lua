@@ -2,7 +2,7 @@
 local message = {}
 message.TYPE_NAME = "glacier.menu.Message"
 
----@alias glacier.menu.Action glacier.menu.action.Item|glacier.menu.action.Menu
+---@alias glacier.menu.Action glacier.menu.action.Entry|glacier.menu.action.Menu
 
 ---@class glacier.menu.Message
 ---@field action glacier.menu.Action

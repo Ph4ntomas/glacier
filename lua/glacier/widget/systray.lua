@@ -23,45 +23,45 @@ local systray = { mt = {} }
 ---@class glacier.widget._systray
 local _systray = {}
 
----@class glacier.widget.systray.MenuItem: glacier.menu.item.ItemBase
+---@class glacier.widget.systray.MenuEntry: glacier.menu.entry.EntryBase
 ---@field private _item glacier.status_notifier.host.Item
 ---@field private _node glacier.status_notifier.LayoutNode
 ---@field private _menu_config glacier.menu.Config
-local MenuItem = Menu.item.ItemBase:new_type()
-MenuItem.__index = MenuItem
-MenuItem.__name = "glacier.widget.systray.MenuItem"
+local MenuEntry = Menu.entry.EntryBase:new_type()
+MenuEntry.__index = MenuEntry
+MenuEntry.__name = "glacier.widget.systray.MenuEntry"
 
-function MenuItem:label()
+function MenuEntry:label()
     return self._node:label()
 end
 
-function MenuItem:disabled()
+function MenuEntry:disabled()
     return not self._node:is_enabled()
 end
 
-function MenuItem:activate(hover)
+function MenuEntry:activate(hover)
     self._item:hover(self._node:id())
 
     if hover and self._node:is_submenu() then
-        return Menu.action.item.OpenMenu()
+        return Menu.action.entry.OpenMenu()
     end
 end
 
-function MenuItem:submit()
+function MenuEntry:submit()
     if self._node:is_submenu() then
-        return Menu.action.item.OpenMenu()
+        return Menu.action.entry.OpenMenu()
     else
         self._item:click(self._node:id())
         return Menu.action.menu.Close()
     end
 end
 
-function MenuItem:open_menu()
+function MenuEntry:open_menu()
     if not self._node:is_submenu() then
         return nil
     end
 
-    local items = {}
+    local entries = {}
     local prev_is_sep = true
     local children = self._node:children()
 
@@ -75,43 +75,44 @@ function MenuItem:open_menu()
                 goto continue
             end
 
-            table.insert(items, Menu.item.separator())
+            table.insert(entries, Menu.entry.separator())
             prev_is_sep = true
         elseif node:is_standard() then
             prev_is_sep = false
 
             local menu_config = require("snowcap.util").deep_copy(self._menu_config)
-            table.insert(items, MenuItem.new(self._item, node, menu_config))
+            table.insert(entries, MenuEntry.new(self._item, node, menu_config))
         end
 
         ::continue::
     end
 
-    -- We don't want to have the items in the main config here
+    -- We don't want to have the entries in the main config here
     local menu_config = require("snowcap.util").deep_copy(self._menu_config)
-    menu_config.items = items
+    menu_config.entries = entries
     return Menu.Menu:new(menu_config)
 end
 
 ---@param active boolean
----@param style glacier.menu.item.Style
+---@param style glacier.menu.entry.Style
 ---@param icon_mask glacier.image.AlphaMask
 ---@return snowcap.widget.WidgetDef
-function MenuItem:view_toggle(active, style, icon_mask)
-    local state = Menu.item.get_state(self, active)
-    local item_style = Menu.item.item_style_for_state(style, state)
+function MenuEntry:view_toggle(active, style, icon_mask)
+    local state = Menu.entry.get_state(self, active)
+    local entry_style = Menu.entry.entry_style_for_state(style, state)
 
     local label_widget = Widget.text({
         text = self:label(),
         width = Widget.length.Fill,
         style = {
-            color = item_style.fg_color,
+            color = entry_style.fg_color,
             font = style.font,
             pixels = style.font_size,
         },
     })
 
-    local icon_handle = icon_mask:to_image_handle(style.menu_indicator.color or item_style.fg_color)
+    local icon_handle =
+        icon_mask:to_image_handle(style.menu_indicator.color or entry_style.fg_color)
     local menu_icon = Widget.Image({
         handle = icon_handle,
         content_fit = Widget.image.content_fit.SCALE_DOWN,
@@ -128,33 +129,33 @@ function MenuItem:view_toggle(active, style, icon_mask)
             item_alignment = Widget.alignment.CENTER,
         }),
         clip = true,
-        padding = item_style.padding,
-        height = item_style.height,
+        padding = entry_style.padding,
+        height = entry_style.height,
         width = Widget.length.Fill,
         valign = Widget.alignment.CENTER,
         style = {
-            background_color = item_style.bg_color,
-            border = item_style.border,
+            background_color = entry_style.bg_color,
+            border = entry_style.border,
         },
     })
 end
 
-function MenuItem:view(active, style)
+function MenuEntry:view(active, style)
     local _icons = require("glacier.misc.icons")
 
     if self._node:is_submenu() then
-        return Menu.item.default_menu_view(self, active, style)
+        return Menu.entry.default_menu_view(self, active, style)
     elseif self._node:is_checkbox() then
         return self:view_toggle(active, style, _icons.checkbox.select(self._node:is_toggled()))
     elseif self._node:is_radio() then
         return self:view_toggle(active, style, _icons.radio.select(self._node:is_toggled()))
     else
-        return Menu.item.default_item_view(self, active, style)
+        return Menu.entry.default_entry_view(self, active, style)
     end
 end
 
-function MenuItem.new(item, node, menu_config)
-    return MenuItem:super({
+function MenuEntry.new(item, node, menu_config)
+    return MenuEntry:super({
         _key = nil,
         _item = item,
         _node = node,
@@ -212,8 +213,8 @@ local _icon_style_keys = {
 ---@class glacier.widget.systray.Style
 ---@field bg_color? snowcap.widget.Color Background color for the whole systray.
 ---@field border? snowcap.widget.Border Border around the whole systray.
----@field spacing? number Spacing between items
----@field padding? snowcap.widget.Padding Padding for the whole row of items.
+---@field spacing? number Spacing between icons.
+---@field padding? snowcap.widget.Padding Padding for the whole row of icons.
 ---@field active? glacier.widget.systray.IconStyle Style
 ---@field hovered? glacier.widget.systray.IconStyle
 ---@field active_hovered? glacier.widget.systray.IconStyle Style
@@ -432,7 +433,7 @@ function SysTray:_activate_item(item_id, parent)
     item:about_to_show()
 
     if item.menu_tree then
-        local root = MenuItem.new(item, item.menu_tree, self._menu_config)
+        local root = MenuEntry.new(item, item.menu_tree, self._menu_config)
         local menu = root:open_menu()
 
         if menu then
