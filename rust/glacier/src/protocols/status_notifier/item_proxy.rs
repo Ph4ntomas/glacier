@@ -12,6 +12,8 @@
 //! [Writing a client proxy]: https://dbus2.github.io/zbus/client.html
 //! [D-Bus standard interfaces]: https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces,
 use zbus::proxy;
+
+use crate::protocols::status_notifier::item::Pixmap;
 #[proxy(interface = "org.kde.StatusNotifierItem", assume_defaults = true)]
 pub trait Item {
     /// Activate method
@@ -79,7 +81,7 @@ pub trait Item {
 
     /// IconPixmap property
     #[zbus(property)]
-    fn icon_pixmap(&self) -> zbus::Result<Vec<(i32, i32, Vec<u8>)>>;
+    fn icon_pixmap(&self) -> zbus::Result<Vec<Pixmap>>;
 
     /// IconThemePath property
     #[zbus(property)]

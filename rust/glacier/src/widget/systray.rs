@@ -218,15 +218,34 @@ where
         let path = item
             .icon_theme_path()
             .zip(item.icon_name())
-            .map(|(path, name)| format!("{path}/{name}.png"))
-            .unwrap_or_default();
+            .map(|(path, name)| format!("{path}/{name}.png"));
 
-        let mut container =
-            Container::new(Image::new(image::Handle::Path(path.into()))).style(container::Style {
-                border: style.border,
-                background_color: style.bg_color,
-                ..Default::default()
+        let handle = if let Some(path) = path {
+            image::Handle::Path(path.into())
+        } else {
+            let handle = item.with_pixmap(|pixmap| {
+                let pixmap = pixmap.first()?;
+
+                Some(widget::image::Handle::Rgba {
+                    width: pixmap.width as u32,
+                    height: pixmap.height as u32,
+                    bytes: pixmap.bytes.clone(),
+                })
             });
+
+            handle.unwrap_or_else(|| {
+                use crate::misc::color;
+                use crate::misc::icons;
+
+                icons::misc::broken_picture().to_image_handle(Some(color::from_hex("#FFFFFF")))
+            })
+        };
+
+        let mut container = Container::new(Image::new(handle)).style(container::Style {
+            border: style.border,
+            background_color: style.bg_color,
+            ..Default::default()
+        });
 
         container.padding = style.padding;
 

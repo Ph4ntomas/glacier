@@ -238,3 +238,52 @@ pub mod checkmark {
         if toggle { selected() } else { unselected() }
     }
 }
+
+/// Miscellaneous icons
+pub mod misc {
+    use crate::misc::image::AlphaMask;
+
+    const B: u8 = 255;
+    const L: u8 = 0;
+
+    /// Broken/no picture icon.
+    pub fn broken_picture() -> AlphaMask {
+        #[rustfmt::skip]
+        let mask = [
+            L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,
+            L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,
+            L,L,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,L,L,L,L,L,L,L,L,
+            L,L,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,L,B,B,L,L,L,L,L,L,L,
+            L,L,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,L,L,B,B,L,L,L,L,L,L,
+            L,L,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,L,L,L,B,B,L,L,L,L,L,
+            L,L,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,L,L,L,L,B,B,L,L,L,L,
+            L,L,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,L,L,L,L,L,B,B,L,L,L,
+            L,L,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,L,L,L,L,L,L,B,B,L,L,
+            L,L,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,L,L,L,L,L,L,L,B,L,L,
+            L,L,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,B,B,B,B,B,B,B,B,L,L,
+            L,L,B,L,L,L,L,L,L,L,B,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,L,L,
+            L,L,B,L,L,L,L,L,L,B,B,B,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,L,L,
+            L,L,B,L,L,L,L,L,B,B,L,L,B,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,L,L,
+            L,L,B,L,L,L,L,B,B,L,L,L,L,B,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,L,L,
+            L,L,B,L,L,L,B,B,L,L,L,L,L,L,B,B,L,L,L,L,L,L,B,L,L,L,L,L,L,B,L,L,
+            L,L,B,L,L,B,B,L,L,L,L,L,L,L,L,B,B,L,L,L,L,B,B,B,L,L,L,L,L,B,L,L,
+            L,L,B,L,B,B,L,L,L,L,L,L,L,L,L,L,B,B,L,L,B,B,L,B,B,L,L,L,L,B,L,L,
+            L,L,B,B,B,L,L,L,L,L,L,L,L,L,L,L,L,B,B,B,B,L,L,L,B,B,L,L,L,B,L,L,
+            L,L,B,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,B,L,L,L,L,L,B,B,L,L,B,L,L,
+            L,L,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,B,L,L,L,L,L,L,L,B,B,L,B,L,L,
+            L,L,B,L,L,L,L,L,L,L,L,L,L,L,L,L,B,B,L,L,L,L,L,L,L,L,L,B,B,B,L,L,
+            L,L,B,L,L,L,L,L,L,L,L,L,L,L,L,B,B,L,L,L,L,L,L,L,L,L,L,L,B,B,L,L,
+            L,L,B,L,L,L,L,L,L,L,L,L,L,L,L,B,L,L,L,L,L,L,L,L,L,L,L,L,L,B,L,L,
+            L,L,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,L,L,
+            L,L,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,L,L,
+            L,L,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,L,L,
+            L,L,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,L,L,
+            L,L,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,L,L,
+            L,L,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,L,L,
+            L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,
+            L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,
+        ];
+
+        AlphaMask::new(32, 32, mask)
+    }
+}

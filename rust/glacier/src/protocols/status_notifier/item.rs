@@ -4,6 +4,7 @@
 use std::sync::{Arc, Mutex, Weak};
 
 use futures::StreamExt;
+use zbus::zvariant;
 
 use crate::{
     BlockOnTokio,
@@ -19,6 +20,7 @@ struct Inner {
     title: Option<String>,
     icon_name: Option<String>,
     icon_theme_path: Option<String>,
+    icon_pixmap: Vec<Pixmap>,
     layout: Option<Node>,
     layout_rev: Option<u32>,
     name: String,
@@ -33,6 +35,13 @@ pub struct Item {
 /// Non-owning [`Item`].
 #[derive(Clone)]
 pub struct WeakItem(Weak<Mutex<Inner>>);
+
+#[derive(Clone, Debug, zvariant::Value)]
+pub struct Pixmap {
+    pub width: i32,
+    pub height: i32,
+    pub bytes: Vec<u8>,
+}
 
 impl Item {
     /// Create a new [`Item`].
@@ -60,6 +69,7 @@ impl Item {
             .await
             .ok()
             .filter(|s| !s.is_empty());
+        let icon_pixmap = item_proxy.icon_pixmap().await.unwrap_or_default();
 
         let is_menu = item_proxy.item_is_menu().await;
         let menu_path = item_proxy.menu().await;
@@ -75,6 +85,7 @@ impl Item {
                     title,
                     icon_name,
                     icon_theme_path,
+                    icon_pixmap,
                     layout: None,
                     layout_rev: None,
                     name,
@@ -103,6 +114,7 @@ impl Item {
             title,
             icon_name,
             icon_theme_path,
+            icon_pixmap,
             layout: Some(layout),
             layout_rev: Some(rev),
             name,
@@ -147,6 +159,13 @@ impl Item {
     /// Gets an additional path to lookup the icon in.
     pub fn icon_theme_path(&self) -> Option<String> {
         self.state.lock().unwrap().icon_theme_path.clone()
+    }
+
+    pub fn with_pixmap<F, Ret>(&self, processor: F) -> Ret
+    where
+        F: FnOnce(&Vec<Pixmap>) -> Ret,
+    {
+        processor(&self.state.lock().unwrap().icon_pixmap)
     }
 
     /// Refresh the Item's menu layout.
