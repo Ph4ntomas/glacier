@@ -216,6 +216,10 @@ function Host:_on_item_registered(item)
         path = _config.items.object
     end
 
+    if path == "" then
+        path = _config.items.object
+    end
+
     self._items[item] = Item_new(self._connection, destination, path)
 end
 
