@@ -257,4 +257,52 @@ function icons.checkbox.select(value)
     end
 end
 
+---@class glaicer.icons.broken_picture
+icons.misc = {}
+
+function icons.misc.broken_picture()
+    --stylua: ignore start
+    local checkbox_mask = {
+        o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,
+        o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,
+        o,o,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,o,o,o,o,o,o,o,o,
+        o,o,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,o,X,X,o,o,o,o,o,o,o,
+        o,o,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,o,o,X,X,o,o,o,o,o,o,
+        o,o,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,o,o,o,X,X,o,o,o,o,o,
+        o,o,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,o,o,o,o,X,X,o,o,o,o,
+        o,o,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,o,o,o,o,o,X,X,o,o,o,
+        o,o,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,o,o,o,o,o,o,X,X,o,o,
+        o,o,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,o,o,o,o,o,o,o,X,o,o,
+        o,o,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,X,X,X,X,X,X,X,X,o,o,
+        o,o,X,o,o,o,o,o,o,o,X,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,o,o,
+        o,o,X,o,o,o,o,o,o,X,X,X,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,o,o,
+        o,o,X,o,o,o,o,o,X,X,o,o,X,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,o,o,
+        o,o,X,o,o,o,o,X,X,o,o,o,o,X,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,o,o,
+        o,o,X,o,o,o,X,X,o,o,o,o,o,o,X,X,o,o,o,o,o,o,X,o,o,o,o,o,o,X,o,o,
+        o,o,X,o,o,X,X,o,o,o,o,o,o,o,o,X,X,o,o,o,o,X,X,X,o,o,o,o,o,X,o,o,
+        o,o,X,o,X,X,o,o,o,o,o,o,o,o,o,o,X,X,o,o,X,X,o,X,X,o,o,o,o,X,o,o,
+        o,o,X,X,X,o,o,o,o,o,o,o,o,o,o,o,o,X,X,X,X,o,o,o,X,X,o,o,o,X,o,o,
+        o,o,X,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,X,o,o,o,o,o,X,X,o,o,X,o,o,
+        o,o,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,X,o,o,o,o,o,o,o,X,X,o,X,o,o,
+        o,o,X,o,o,o,o,o,o,o,o,o,o,o,o,o,X,X,o,o,o,o,o,o,o,o,o,X,X,X,o,o,
+        o,o,X,o,o,o,o,o,o,o,o,o,o,o,o,X,X,o,o,o,o,o,o,o,o,o,o,o,X,X,o,o,
+        o,o,X,o,o,o,o,o,o,o,o,o,o,o,o,X,o,o,o,o,o,o,o,o,o,o,o,o,o,X,o,o,
+        o,o,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,o,o,
+        o,o,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,o,o,
+        o,o,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,o,o,
+        o,o,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,o,o,
+        o,o,X,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,X,o,o,
+        o,o,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,o,o,
+        o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,
+        o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,o,
+    }
+    --stylua: ignore end
+
+    return Image.alpha({
+        x = 32,
+        y = 32,
+        mask = checkbox_mask,
+    })
+end
+
 return icons

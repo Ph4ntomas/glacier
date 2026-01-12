@@ -331,14 +331,34 @@ end
 ---@param item glacier.status_notifier.host.Item
 ---@param style glacier.widget.systray.IconStyle
 function systray.default_icon_view(item, style)
+    local _icons = require("glacier.misc.icons")
+    local _color = require("glacier.misc.color")
     local icon_name = item.icon_name
-    local path = item.icon_theme_path .. "/" .. icon_name .. ".png"
+
+    local image_handle
+    if icon_name and string.len(icon_name) > 0 then
+        local path = item.icon_theme_path .. "/" .. icon_name .. ".png"
+        image_handle = {
+            path = path,
+        }
+    else
+        local pixmap = item.icon_pixmap[1]
+
+        if pixmap then
+            image_handle = {
+                rgba = { width = pixmap.x, height = pixmap.y, rgba = pixmap.data },
+            }
+        end
+    end
+
+    if not image_handle then
+        local icon_mask = _icons.misc.broken_picture()
+        image_handle = icon_mask:to_image_handle(_color.from_hex("#FFFFFF"))
+    end
 
     return Widget.container({
         child = Widget.Image({
-            handle = {
-                path = path,
-            },
+            handle = image_handle,
         }),
         padding = style.padding,
         style = {

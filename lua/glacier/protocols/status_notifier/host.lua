@@ -72,7 +72,7 @@ function Item_new(connection, destination, path)
     elseif item.is_menu then
         Log.warn(("%s:is_menu is set, but no menu could be retrieved."):format(destination))
     end
-    --item.icon_pixmap = proxy:get_icon_pixmap()
+    item.icon_pixmap = proxy:get_icon_pixmap()
 
     return item
 end
