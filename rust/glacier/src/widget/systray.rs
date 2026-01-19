@@ -201,7 +201,7 @@ where
 
         let mut container = Container::new(row).style(container::Style {
             border: style.border,
-            background_color: style.bg_color,
+            background: style.bg_color.map(From::from),
             ..Default::default()
         });
 
@@ -243,7 +243,7 @@ where
 
         let mut container = Container::new(Image::new(handle)).style(container::Style {
             border: style.border,
-            background_color: style.bg_color,
+            background: style.bg_color.map(From::from),
             ..Default::default()
         });
 

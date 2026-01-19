@@ -93,7 +93,7 @@ pub fn default_entry_view<Msg>(
     let mut container = Container::new(label)
         .clip(true)
         .style(container::Style {
-            background_color: bg_color,
+            background: bg_color.map(From::from),
             border,
             ..Default::default()
         })
@@ -139,7 +139,7 @@ pub fn default_menu_view<Msg>(
     )
     .clip(true)
     .style(container::Style {
-        background_color: bg_color,
+        background: bg_color.map(From::from),
         border,
         ..Default::default()
     })
@@ -479,7 +479,7 @@ where
             Container::new(Column::new())
                 .width(Length::Fill)
                 .style(container::Style {
-                    background_color: bg_color,
+                    background: bg_color.map(From::from),
                     border: Some(Border {
                         color: fg_color,
                         width: thickness,

@@ -250,7 +250,7 @@ impl From<ContentStyle> for snowcap_api::widget::container::Style {
     fn from(value: ContentStyle) -> Self {
         Self {
             text_color: value.fg_color,
-            background_color: value.bg_color,
+            background: value.bg_color.map(From::from),
             border: value.border,
         }
     }

@@ -40,7 +40,7 @@ use snowcap_api::{
         self, Anchor, AsParent, ConstraintsAdjust, Gravity, Offset, Parent, PopupHandle, Position,
     },
     widget::{
-        Length, Program, WidgetDef,
+        Background, Length, Program, WidgetDef,
         column::Column,
         container::{self, Container},
         mouse_area::MouseArea,
@@ -529,7 +529,7 @@ where
         container.height = style.height;
         container.padding = style.padding;
         container.style = Some(container::Style {
-            background_color: style.bg_color,
+            background: style.bg_color.map(Background::Color),
             border: style.border,
             ..Default::default()
         });

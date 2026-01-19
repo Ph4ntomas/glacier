@@ -100,7 +100,7 @@ impl From<Style> for container::Style {
 
         Self {
             text_color: fg_color,
-            background_color: bg_color,
+            background: bg_color.map(From::from),
             border,
         }
     }

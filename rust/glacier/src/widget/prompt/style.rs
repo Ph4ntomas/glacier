@@ -277,7 +277,7 @@ impl From<PromptStyle> for text_input::Style {
         } = value;
 
         Self {
-            background_color: bg_color,
+            background: bg_color.map(From::from),
             border,
             icon: icon_color,
             placeholder: placeholder_color,

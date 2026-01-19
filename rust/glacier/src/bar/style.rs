@@ -116,14 +116,12 @@ impl Style {
 impl From<Style> for snowcap_api::widget::container::Style {
     fn from(value: Style) -> Self {
         let Style {
-            bg_color: background_color,
-            border,
-            ..
+            bg_color, border, ..
         } = value;
 
         Self {
             text_color: None,
-            background_color,
+            background: bg_color.map(From::from),
             border,
         }
     }

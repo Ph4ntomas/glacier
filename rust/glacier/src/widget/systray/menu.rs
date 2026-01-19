@@ -131,7 +131,7 @@ impl Entry {
         .width(widget::Length::Fill)
         .vertical_alignment(widget::Alignment::Center)
         .style(container::Style {
-            background_color: bg_color,
+            background: bg_color.map(From::from),
             border,
             ..Default::default()
         });
