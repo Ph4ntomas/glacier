@@ -247,7 +247,7 @@ end
 function taglist.default_tag_view(tag_name, style)
     return Widget.container({
         style = {
-            background_color = style.bg_color,
+            background = Widget.background.Color(style.bg_color),
         },
         padding = style.padding,
         child = Widget.text({

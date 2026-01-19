@@ -134,7 +134,7 @@ function MenuEntry:view_toggle(active, style, icon_mask)
         width = Widget.length.Fill,
         valign = Widget.alignment.CENTER,
         style = {
-            background_color = entry_style.bg_color,
+            background = Widget.background.Color(entry_style.bg_color),
             border = entry_style.border,
         },
     })
@@ -321,7 +321,7 @@ function systray.default_view(children, style)
         padding = style.padding,
         style = {
             border = style.border,
-            background_color = style.bg_color,
+            background = Widget.background.Color(style.bg_color),
         },
     })
 end
@@ -363,7 +363,7 @@ function systray.default_icon_view(item, style)
         padding = style.padding,
         style = {
             border = style.border,
-            background_color = style.bg_color,
+            background = Widget.background.Color(style.bg_color),
         },
     })
 end

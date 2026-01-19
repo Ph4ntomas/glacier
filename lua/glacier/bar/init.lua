@@ -79,7 +79,7 @@ local Bar = {}
 ---@class glacier.bar.Style
 ---@field dimension? integer Dimension of the bar, in pixel.
 ---@field padding? snowcap.widget.Padding Bar padding.
----@field background_color? snowcap.widget.Color Bar background color.
+---@field bg_color? snowcap.widget.Color Bar background color.
 ---@field border? snowcap.widget.Border Bar's border.
 ---@field spacing? number Spacing between elements.
 ---@field first_spacing? number Spacing between first block.
@@ -167,7 +167,7 @@ function Bar:view()
         haligh = Widget.alignment.START,
         padding = self.style.padding,
         style = {
-            background_color = self.style.background_color,
+            background = Widget.background.Color(self.style.bg_color),
             border = {
                 width = self.style.border.width,
                 color = self.style.border.color,
@@ -364,7 +364,7 @@ function Bar:new(config)
         output = config.output,
         style = {
             dimension = 24,
-            background_color = Widget.color.from_rgba(0.15, 0.03, 0.1, 0.65),
+            bg_color = Widget.color.from_rgba(0.15, 0.03, 0.1, 0.65),
             border = { thickness = 0 },
             padding = {
                 top = 8,
@@ -386,7 +386,7 @@ function Bar:new(config)
     local bar = {
         style = {
             dimension = config.style.dimension,
-            background_color = config.style.background_color,
+            bg_color = config.style.bg_color,
             border = config.style.border,
             padding = config.style.padding,
             spacing = config.style.spacing,

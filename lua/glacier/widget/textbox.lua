@@ -116,7 +116,7 @@ function Style:to_container()
     ---@type snowcap.widget.container.Style
     return {
         text_color = self.fg_color,
-        background_color = self.bg_color,
+        background = Widget.background.Color(self.bg_color),
         border = self.border,
     }
 end
