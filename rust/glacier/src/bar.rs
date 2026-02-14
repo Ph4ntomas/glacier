@@ -416,10 +416,8 @@ where
 {
     type Message = BarMessage<Msg>;
 
-    fn view(&self) -> snowcap_api::widget::WidgetDef<Self::Message> {
-        let Some(bar) = self.0.upgrade() else {
-            return Row::new().into();
-        };
+    fn view(&self) -> Option<snowcap_api::widget::WidgetDef<Self::Message>> {
+        let bar = self.0.upgrade()?;
 
         let state = bar.state.lock().unwrap();
 
@@ -458,7 +456,7 @@ where
 
         view.padding = padding;
 
-        view.into()
+        Some(view.into())
     }
 
     fn update(&mut self, msg: Self::Message) {

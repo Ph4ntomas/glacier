@@ -433,13 +433,8 @@ impl Clone for Handle {
 impl Program for KeyGrabberProgram {
     type Message = ();
 
-    fn view(&self) -> snowcap_api::widget::WidgetDef<Self::Message> {
-        use snowcap_api::widget::{self, row::Row};
-
-        Row::new()
-            .height(widget::Length::Fixed(1.0))
-            .width(widget::Length::Fixed(1.0))
-            .into()
+    fn view(&self) -> Option<snowcap_api::widget::WidgetDef<Self::Message>> {
+        None
     }
 
     fn update(&mut self, _msg: Self::Message) {}

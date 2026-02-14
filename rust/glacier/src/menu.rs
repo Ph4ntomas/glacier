@@ -869,21 +869,15 @@ where
 {
     type Message = MenuMessage<Msg>;
 
-    fn view(&self) -> snowcap_api::widget::WidgetDef<Self::Message> {
-        let Some(menu) = self.0.upgrade() else {
-            return Column::new()
-                .width(Length::Fixed(1.))
-                .height(Length::Fixed(1.))
-                .into();
-        };
-
+    fn view(&self) -> Option<snowcap_api::widget::WidgetDef<Self::Message>> {
+        let menu = self.0.upgrade()?;
         let state = menu.state.lock().unwrap();
         let children = Self::view_entries(&state);
 
         if let Some(callback) = &state.view_callback {
-            callback(children, &state.style)
+            Some(callback(children, &state.style))
         } else {
-            Menu::default_view(children, &state.style)
+            Some(Menu::default_view(children, &state.style))
         }
     }
 
