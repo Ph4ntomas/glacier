@@ -1,11 +1,11 @@
-//! Deferred function call.
-
 use std::{
     sync::{Arc, Mutex, Weak},
     time::Duration,
 };
 
-use crate::{signal::HandlerPolicy, util::timer::Timer};
+use snowcap_api::signal::HandlerPolicy;
+
+use crate::util::timer::{Timeout, Timer};
 
 struct Inner {
     timer: Timer,
@@ -62,9 +62,9 @@ impl Deferred {
             state: Arc::new(Mutex::new(inner)),
         };
 
-        timer.with_callback({
+        timer.connect({
             let handle = defer.clone();
-            move |_| {
+            move |_: Timeout| {
                 let mut inner = handle.state.lock().unwrap();
                 (inner.callback)();
                 inner.fired = true;
