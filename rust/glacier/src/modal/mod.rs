@@ -266,24 +266,25 @@ use pinnacle_api::{
     input::{Bind, Mod, ToKeysym},
 };
 use regex::{self, Regex};
-use snowcap_api::input::Modifiers;
 
-use crate::{
-    KeyGrabber, keygrabber,
-    signal::{Emitter, HandlerPolicy, Signal, WithEmitter},
-    widget::TextBox,
+use snowcap_api::{
+    input::Modifiers,
+    signal::{HandlerPolicy, Signal, Signaler},
+    widget::message::UniversalMsg,
 };
+
+use crate::{KeyGrabber, keygrabber, widget::textbox::TextBox};
 
 mod state;
 use state::State;
 
 /// [`Signal`] emitted when the active [`Mode`] changes.
 #[derive(Clone, Signal)]
-pub struct ModeChanged(WeakHandle);
+pub struct ModeChanged(pub WeakHandle, pub String);
 
 /// [`Signal`] emitted when the current input sequence changes.
 #[derive(Clone, Signal)]
-pub struct SequenceChanged(WeakHandle);
+pub struct SequenceChanged(pub WeakHandle, pub String);
 
 /// Proxy object passed to [`Command`] handlers when they are called.
 pub struct Proxy {
@@ -514,7 +515,7 @@ impl Modal {
         let default_mode = default_mode.unwrap_or(Self::DEFAULT_MODE.into());
         let stop_mode = stop_mode.unwrap_or(Self::DEFAULT_STOP_MODE.into());
 
-        let signal_emitter = Emitter::new();
+        let signaler = Signaler::new();
         let grabber = KeyGrabber::new();
         let modes = Self::process_modes(modes);
 
@@ -524,7 +525,7 @@ impl Modal {
             default_mode,
             stop_mode,
             grabber,
-            signal_emitter,
+            signaler,
             modes,
         };
 
@@ -634,68 +635,60 @@ impl ModalHandle {
         WeakHandle(Arc::downgrade(&self.state))
     }
 
-    pub fn active_mode<Msg>(&self, text_box: Option<TextBox<Msg>>) -> TextBox<Msg>
+    pub fn active_mode<Msg>(&self) -> TextBox<Msg>
     where
-        Msg: Send + 'static,
+        Msg: From<UniversalMsg> + Clone + Send + 'static,
     {
         // Lock the state so the active_mode can't change before the textbox is returned.
-        let mut state = self.state.lock().unwrap();
-        let mut text_box = text_box.unwrap_or_default();
+        let state = self.state.lock().unwrap();
+        let text_box = TextBox::with_content(&state.active_mode);
 
-        text_box.set(&state.active_mode);
+        text_box.connect_with(&state.signaler, |ModeChanged(_, new_mode), handle| {
+            let Ok(_) = handle.set_content(new_mode) else {
+                return HandlerPolicy::Discard;
+            };
 
-        state.connect({
-            let weak = text_box.downgrade();
-
-            move |ModeChanged(hndl)| {
-                if let Some(mut text_box) = weak.upgrade() {
-                    let handle = hndl.upgrade().unwrap();
-                    let new_mode = handle.state.lock().unwrap().active_mode.clone();
-
-                    text_box.set(new_mode);
-
-                    HandlerPolicy::Keep
-                } else {
-                    HandlerPolicy::Discard
-                }
-            }
+            HandlerPolicy::Keep
         });
 
         text_box
     }
 
-    pub fn sequence<Msg>(&self, text_box: Option<TextBox<Msg>>) -> TextBox<Msg>
+    pub fn sequence<Msg>(&self) -> TextBox<Msg>
     where
-        Msg: Send + 'static,
+        Msg: From<UniversalMsg> + Clone + Send + 'static,
     {
         // Lock the state so the sequence can't change before the textbox is returned.
-        let mut state = self.state.lock().unwrap();
-        let mut text_box = text_box.unwrap_or_default();
+        let state = self.state.lock().unwrap();
+        let text_box = TextBox::with_content(&state.sequence);
 
-        text_box.set(&state.sequence);
+        text_box.connect_with(&state.signaler, |SequenceChanged(_, sequence), handle| {
+            let Ok(()) = handle.set_content(sequence) else {
+                return HandlerPolicy::Discard;
+            };
 
-        state.connect({
-            let weak = text_box.downgrade();
-
-            move |SequenceChanged(hndl)| {
-                if let Some(mut text_box) = weak.upgrade() {
-                    let handle = hndl.upgrade().unwrap();
-                    let new_seq = handle.state.lock().unwrap().sequence.clone();
-                    text_box.set(new_seq);
-
-                    HandlerPolicy::Keep
-                } else {
-                    HandlerPolicy::Discard
-                }
-            }
+            HandlerPolicy::Keep
         });
 
         text_box
+    }
+
+    fn emit<S>(&self, sig: S)
+    where
+        S: Signal,
+    {
+        let signaler = self.state.lock().unwrap().signaler();
+        signaler.emit(sig);
     }
 
     fn mode_change(&self) {
-        self.emit(SequenceChanged(self.downgrade()));
-        self.emit(ModeChanged(self.downgrade()));
+        let (mode, seq) = {
+            let state = self.state.lock().unwrap();
+            (state.active_mode.clone(), state.sequence.clone())
+        };
+
+        self.emit(SequenceChanged(self.downgrade(), seq));
+        self.emit(ModeChanged(self.downgrade(), mode));
     }
 
     fn process_key(
@@ -712,7 +705,7 @@ impl ModalHandle {
         let sequence = self.state.lock().unwrap().process_key(keysym, text);
 
         if sequence.is_empty() {
-            self.emit(SequenceChanged(self.downgrade()));
+            self.emit(SequenceChanged(self.downgrade(), sequence));
             return;
         }
 
@@ -746,7 +739,8 @@ impl ModalHandle {
             command.call(p, args);
         }
 
-        self.emit(SequenceChanged(self.downgrade()));
+        let sequence = self.state.lock().unwrap().sequence.clone();
+        self.emit(SequenceChanged(self.downgrade(), sequence));
     }
 }
 
@@ -778,12 +772,6 @@ impl Proxy {
     /// Access the underlying [`KeyGrabber`] handle.
     pub fn grabber(&self) -> &keygrabber::Handle {
         &self.grabber
-    }
-}
-
-impl WithEmitter for ModalHandle {
-    fn with_emitter(&self) -> Emitter {
-        self.state.lock().unwrap().with_emitter()
     }
 }
 

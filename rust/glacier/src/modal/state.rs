@@ -5,12 +5,9 @@ use std::{
 
 use pinnacle_api::Keysym;
 use regex::Regex;
-use snowcap_api::input::Modifiers;
+use snowcap_api::{input::Modifiers, signal::Signaler};
 
-use crate::{
-    KeyGrabber,
-    signal::{Emitter, WithEmitter},
-};
+use crate::KeyGrabber;
 
 pub struct State {
     pub active_mode: String,
@@ -18,7 +15,7 @@ pub struct State {
     pub default_mode: String,
     pub stop_mode: String,
     pub grabber: KeyGrabber,
-    pub signal_emitter: Emitter,
+    pub signaler: Signaler,
     pub modes: HashMap<String, Mode>,
 }
 
@@ -115,11 +112,9 @@ impl State {
             .get(&self.active_mode)
             .expect("Internal Error: Could not get active mode")
     }
-}
 
-impl WithEmitter for State {
-    fn with_emitter(&self) -> Emitter {
-        self.signal_emitter.clone()
+    pub fn signaler(&self) -> Signaler {
+        self.signaler.clone()
     }
 }
 
