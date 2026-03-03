@@ -16,45 +16,37 @@
 
 use std::time::{Duration, Instant};
 
-use pinnacle_api::signal::TagSignal;
-use pinnacle_api::util::Batch;
-use pinnacle_api::{output::OutputHandle, tag::TagHandle};
-use snowcap_api::popup::Parent;
-use snowcap_api::widget::row::Row;
-use snowcap_api::widget::text::Text;
-use snowcap_api::widget::{WidgetDef, mouse_area};
-use snowcap_api::widget::{container::Container, mouse_area::MouseArea};
-
-use crate::color;
-use crate::widget::message::{self, MessageBuilder};
-use crate::widget::{WeakState, signal};
 use crate::{
-    signal::WithEmitter,
-    widget::{State, Widget, WidgetMessage, WithState, base::WidgetBase},
+    color,
+    widget::message::{self, MessageBuilder},
+};
+
+use pinnacle_api::{
+    output::OutputHandle,
+    signal::{SignalHandle, TagSignal},
+    tag::TagHandle,
+    util::Batch,
+};
+use snowcap_api::{
+    surface::SurfaceEvent,
+    widget::{
+        self, Program, WidgetDef,
+        base::WidgetBase,
+        container::Container,
+        message::UniversalMsg,
+        mouse_area::{self, MouseArea},
+        row::Row,
+        text::Text,
+    },
 };
 
 pub mod style;
 #[doc(inline)]
 pub use style::{Style, TagStyle, brighten_background};
 
-type TagViewCallback<Msg> = Box<dyn Fn(&Tag, TagStyle) -> Option<WidgetDef<Msg>> + Send + Sync>;
+type TagViewCallback<Msg> = Box<dyn Fn(&Tag, TagStyle) -> Option<WidgetDef<Msg>> + Send>;
 type ListViewCallback<Msg> =
-    Box<dyn Fn(Vec<WidgetDef<Msg>>, Style) -> Option<WidgetDef<Msg>> + Send + Sync>;
-
-/// [`TagList`] actions.
-#[derive(Clone, Debug)]
-pub enum Action {
-    Toggle(TagHandle),
-    Switch(TagHandle),
-    EnterTag(TagHandle),
-    ExitTag(TagHandle),
-    NextTag,
-    PrevTag,
-    SmallScroll,
-}
-
-/// [`TagList`] messages type.
-pub type Message = message::Message<Action>;
+    Box<dyn Fn(Vec<WidgetDef<Msg>>, Style) -> Option<WidgetDef<Msg>> + Send>;
 
 /// Single Tag state.
 pub struct Tag {
@@ -68,28 +60,46 @@ pub struct Tag {
     pub hovered: bool,
 }
 
-/// Internal [`TagList`] stste.
-pub struct Inner<Msg> {
+impl Tag {
+    /// Create a new [`Tag`].
+    fn new(handle: TagHandle, name: String, active: bool) -> Self {
+        Self {
+            handle,
+            name,
+            active,
+            hovered: false,
+        }
+    }
+}
+
+/// [`TagList`] events.
+#[derive(Clone, Debug)]
+pub enum Event {
+    Toggle(TagHandle),
+    Switch(TagHandle),
+    EnterTag(TagHandle),
+    ExitTag(TagHandle),
+    NextTag,
+    PrevTag,
+    SmallScroll,
+    ActiveChanged(TagHandle, bool),
+}
+
+/// [`TagList`] message type
+pub type Message = message::Message<Event>;
+
+pub struct TagList<Msg> {
     base: WidgetBase,
     tags: Vec<Tag>,
     style: Style,
-    message_builder: MessageBuilder<Action>,
+    message_builder: MessageBuilder<Event>,
     tag_view_callback: Option<TagViewCallback<Msg>>,
     list_view_callback: Option<ListViewCallback<Msg>>,
     throttle_scroll: Duration,
     last_scroll: Instant,
-    _output: OutputHandle,
+    sig_handle: Option<SignalHandle>,
+    output: OutputHandle,
 }
-
-/// Widget representing a list of Tags.
-#[derive(Clone)]
-pub struct TagList<Msg> {
-    state: State<Inner<Msg>>,
-}
-
-/// Non-owning version of the [`TagList`].
-#[derive(Clone)]
-pub struct WeakTagList<Msg>(WeakState<Inner<Msg>>);
 
 /// Default [`TagList`] appearance.
 pub fn default_style() -> Style {
@@ -120,7 +130,8 @@ pub fn default_style() -> Style {
         .inactive(TagStyle::new().bg_color(color::from_hex("#666666")))
 }
 
-fn get_all_tags(output: OutputHandle) -> impl Iterator<Item = Tag> {
+/// Get all [`Tag`]s associated with an output.
+pub(crate) fn get_all_tags(output: OutputHandle) -> impl Iterator<Item = Tag> {
     output.tags().batch_map(|tag| {
         Box::pin(async {
             Tag::new(
@@ -132,98 +143,58 @@ fn get_all_tags(output: OutputHandle) -> impl Iterator<Item = Tag> {
     })
 }
 
-impl<Msg> TagList<Msg>
-where
-    Msg: Send + 'static,
-{
+impl<Msg> TagList<Msg> {
+    const PROGRAM_NAME: &'static str = "TAG_LIST";
     const DEFAULT_THROTTLE: Duration = Duration::from_millis(50);
 
     /// Create a new [`TagList`] for a given [`OutputHandle`].
     pub fn new(output: OutputHandle) -> Self {
-        let tags = get_all_tags(output.clone()).collect();
-        let base = WidgetBase::new("TagList");
+        let base = WidgetBase::new(Self::PROGRAM_NAME);
         let message_builder = MessageBuilder::new(base.id());
 
-        let state = State::new(Inner {
+        Self {
             base,
-            tags,
+            tags: Default::default(),
             style: default_style(),
             message_builder,
             tag_view_callback: None,
             list_view_callback: None,
             throttle_scroll: Self::DEFAULT_THROTTLE,
             last_scroll: Instant::now(),
-            _output: output,
-        });
-
-        let list = Self { state };
-        let weak = list.downgrade();
-
-        pinnacle_api::tag::connect_signal(TagSignal::Active(Box::new(move |handle, active| {
-            let Some(list) = weak.upgrade() else {
-                return;
-            };
-
-            let mut redraw = false;
-
-            {
-                let mut inner = list.state.0.lock().unwrap();
-
-                for tag in inner.tags.iter_mut() {
-                    if &tag.handle == handle {
-                        tag.active = active;
-                        redraw = true;
-                        break;
-                    }
-                }
-            }
-
-            if redraw {
-                list.emit(signal::RedrawNeeded);
-            }
-        })));
-
-        list
+            sig_handle: None,
+            output,
+        }
     }
 
-    /// Sets the [`Style`].
+    /// Sets the `TagList` [`Style`].
     pub fn style(self, style: Style) -> Self {
-        self.state.0.lock().unwrap().style = style;
-        self.emit(signal::RedrawNeeded);
-        self
+        Self { style, ..self }
     }
 
     /// Sets the callback to render a single [`Tag`].
     pub fn tag_view_callback<F>(self, callback: F) -> Self
     where
-        F: Fn(&Tag, TagStyle) -> Option<WidgetDef<Msg>> + Send + Sync + 'static,
+        F: Fn(&Tag, TagStyle) -> Option<WidgetDef<Msg>> + Send + 'static,
     {
-        self.state.0.lock().unwrap().tag_view_callback = Some(Box::new(callback));
-        self.emit(signal::RedrawNeeded);
-        self
+        Self {
+            tag_view_callback: Some(Box::new(callback)),
+            ..self
+        }
     }
 
     /// Sets the callback to render the full list.
     pub fn list_view_callback<F>(self, callback: F) -> Self
     where
-        F: Fn(Vec<WidgetDef<Msg>>, Style) -> Option<WidgetDef<Msg>> + Send + Sync + 'static,
+        F: Fn(Vec<WidgetDef<Msg>>, Style) -> Option<WidgetDef<Msg>> + Send + 'static,
     {
-        self.state.0.lock().unwrap().list_view_callback = Some(Box::new(callback));
-        self.emit(signal::RedrawNeeded);
-        self
+        Self {
+            list_view_callback: Some(Box::new(callback)),
+            ..self
+        }
     }
+}
 
-    /// Sets the cooldown time between two Scroll events.
-    pub fn throttle_scroll(self, throttle: Duration) -> Self {
-        self.state.0.lock().unwrap().throttle_scroll = throttle;
-        self
-    }
-
-    /// Create a new [`WeakTagList`] for this `TagList`.
-    pub fn downgrade(&self) -> WeakTagList<Msg> {
-        WeakTagList(self.state.downgrade())
-    }
-
+impl<Msg> TagList<Msg> {
     /// Default view to render [`Tag`].
     pub fn default_tag_view(tag: &Tag, style: TagStyle) -> Option<WidgetDef<Msg>> {
         let text = Text::new(tag.name.clone())
@@ -253,18 +224,9 @@ where
     }
 }
 
-impl<Msg> WeakTagList<Msg> {
-    /// Attempts to upgrade this `WeakTagList` to a [`TagList`].
-    ///
-    /// Returns [`None`] if the [`TagList`] has already been dropped.
-    pub fn upgrade(&self) -> Option<TagList<Msg>> {
-        self.0.upgrade().map(|state| TagList { state })
-    }
-}
-
-impl<Msg> Inner<Msg>
+impl<Msg> TagList<Msg>
 where
-    Msg: From<WidgetMessage> + Send + 'static,
+    Msg: From<UniversalMsg>,
 {
     fn view_tags(&self) -> Vec<WidgetDef<Msg>> {
         self.tags
@@ -281,7 +243,7 @@ where
 
                 let builder = self.message_builder;
 
-                let tag = if let Some(callback) = &self.tag_view_callback {
+                let tag = if let Some(callback) = self.tag_view_callback.as_ref() {
                     callback(t, style)
                 } else {
                     TagList::default_tag_view(t, style)
@@ -299,6 +261,35 @@ where
             .collect()
     }
 
+    fn on_scroll(builder: MessageBuilder<Event>, delta: mouse_area::ScrollDelta) -> Msg {
+        let delta = match delta {
+            mouse_area::ScrollDelta::Lines { x, y } => {
+                if f32::abs(x) > f32::abs(y) {
+                    x
+                } else {
+                    y
+                }
+            }
+            mouse_area::ScrollDelta::Pixels { x, y } => {
+                if f32::abs(x) > f32::abs(y) {
+                    x
+                } else {
+                    y
+                }
+            }
+        };
+
+        if delta > 0.5 {
+            builder.next_tag().into()
+        } else if delta < -0.5 {
+            builder.prev_tag().into()
+        } else {
+            builder.small_scroll().into()
+        }
+    }
+}
+
+impl<Msg> TagList<Msg> {
     fn set_hover_for(&mut self, handle: TagHandle, hover: bool) {
         for t in self.tags.iter_mut() {
             if t.handle == handle {
@@ -336,71 +327,24 @@ where
             t.handle.switch_to();
         }
     }
-
-    fn on_scroll(builder: MessageBuilder<Action>, delta: mouse_area::ScrollDelta) -> Msg {
-        let delta = match delta {
-            mouse_area::ScrollDelta::Lines { x, y } => {
-                if f32::abs(x) > f32::abs(y) {
-                    x
-                } else {
-                    y
-                }
-            }
-            mouse_area::ScrollDelta::Pixels { x, y } => {
-                if f32::abs(x) > f32::abs(y) {
-                    x
-                } else {
-                    y
-                }
-            }
-        };
-
-        if delta > 0.5 {
-            builder.next_tag().into()
-        } else if delta < -0.5 {
-            builder.prev_tag().into()
-        } else {
-            builder.small_scroll().into()
-        }
-    }
 }
 
-impl<Msg> WithEmitter for TagList<Msg> {
-    fn with_emitter(&self) -> crate::signal::Emitter {
-        self.state.0.lock().unwrap().with_emitter()
-    }
-}
-
-impl<Msg> WithState for TagList<Msg> {
-    type Type = Inner<Msg>;
-
-    fn with_state(&self) -> State<Self::Type> {
-        self.state.clone()
-    }
-}
-
-impl<Msg> WithEmitter for Inner<Msg> {
-    fn with_emitter(&self) -> crate::signal::Emitter {
-        self.base.with_emitter()
-    }
-}
-
-impl<Msg> Widget for Inner<Msg>
+impl<Msg> Program for TagList<Msg>
 where
-    Msg: Clone + From<WidgetMessage> + Into<Option<WidgetMessage>> + Send + Sync + 'static,
+    Msg: From<UniversalMsg> + TryInto<UniversalMsg> + Clone + 'static,
 {
     type Message = Msg;
 
-    fn view(&self) -> Option<snowcap_api::widget::WidgetDef<Self::Message>> {
+    fn view(&self) -> Option<WidgetDef<Self::Message>> {
         if self.tags.is_empty() {
             return None;
-        };
+        }
 
         let style = self.style.clone();
         let children = self.view_tags();
         let builder = self.message_builder;
 
-        let list = if let Some(callback) = &self.list_view_callback {
+        let list = if let Some(callback) = self.list_view_callback.as_ref() {
             callback(children, style)
         } else {
             TagList::default_list_view(children, style)
@@ -411,17 +355,44 @@ where
         Some(widget.into())
     }
 
-    fn update(&mut self, msg: Self::Message, _parent: Option<Parent>) {
-        let Some(msg) = msg.into() else {
+    fn event(&mut self, event: snowcap_api::surface::SurfaceEvent<Self::Message>) {
+        match event {
+            SurfaceEvent::Created { .. } => {
+                self.tags = get_all_tags(self.output.clone()).collect();
+
+                let sig_handle = pinnacle_api::tag::connect_signal({
+                    let signaler = self.base.signaler();
+                    let builder = self.message_builder;
+                    TagSignal::Active(Box::new(move |handle, active| {
+                        signaler.emit(widget::signal::Message(Msg::from(
+                            builder.active_changed(handle.clone(), active),
+                        )));
+                    }))
+                });
+
+                self.sig_handle = Some(sig_handle);
+                self.base.signaler().emit(widget::signal::RedrawNeeded);
+            }
+            SurfaceEvent::Closing => {
+                if let Some(handle) = self.sig_handle.take() {
+                    handle.disconnect();
+                }
+            }
+            _ => (),
+        }
+    }
+
+    fn update(&mut self, msg: Self::Message) {
+        let Some(universal) = msg.try_into().ok() else {
             return;
         };
 
-        let action = match msg {
-            WidgetMessage::TagList(Message { id, action }) if id == self.base.id() => action,
+        let event = match universal.downcast::<Message>() {
+            Ok(message::Message { id, event }) if id == self.base.id() => event,
             _ => return,
         };
 
-        if matches!(action, Action::NextTag | Action::PrevTag) {
+        if matches!(event, Event::NextTag | Event::PrevTag) {
             let now = Instant::now();
             let diff = now - self.last_scroll;
 
@@ -432,61 +403,59 @@ where
             }
         }
 
-        match action {
-            Action::Switch(t) => t.switch_to(),
-            Action::Toggle(t) => t.toggle_active(),
-            Action::EnterTag(t) => self.set_hover_for(t, true),
-            Action::ExitTag(t) => self.set_hover_for(t, false),
-            Action::NextTag => self.focus_next_tag(),
-            Action::PrevTag => self.focus_prev_tag(),
+        match event {
+            Event::Switch(t) => t.switch_to(),
+            Event::Toggle(t) => t.toggle_active(),
+            Event::EnterTag(t) => self.set_hover_for(t, true),
+            Event::ExitTag(t) => self.set_hover_for(t, false),
+            Event::NextTag => self.focus_next_tag(),
+            Event::PrevTag => self.focus_prev_tag(),
+            Event::ActiveChanged(t, active) => {
+                for tag in self.tags.iter_mut() {
+                    if tag.handle == t {
+                        tag.active = active;
+                    }
+                }
+            }
             _ => {}
         }
     }
-}
 
-impl Tag {
-    fn new(handle: TagHandle, name: String, active: bool) -> Self {
-        Self {
-            handle,
-            name,
-            active,
-            hovered: false,
-        }
+    fn signaler(&self) -> Option<snowcap_api::signal::Signaler> {
+        Some(self.base.signaler())
     }
 }
 
-impl From<Message> for WidgetMessage {
-    fn from(value: Message) -> Self {
-        Self::TagList(value)
-    }
-}
-
-impl MessageBuilder<Action> {
-    fn toggle(&self, handle: TagHandle) -> WidgetMessage {
-        self.build(Action::Toggle(handle))
+impl MessageBuilder<Event> {
+    fn toggle(&self, handle: TagHandle) -> UniversalMsg {
+        self.build(Event::Toggle(handle))
     }
 
-    fn switch(&self, handle: TagHandle) -> WidgetMessage {
-        self.build(Action::Switch(handle))
+    fn switch(&self, handle: TagHandle) -> UniversalMsg {
+        self.build(Event::Switch(handle))
     }
 
-    fn enter(&self, handle: TagHandle) -> WidgetMessage {
-        self.build(Action::EnterTag(handle))
+    fn enter(&self, handle: TagHandle) -> UniversalMsg {
+        self.build(Event::EnterTag(handle))
     }
 
-    fn exit(&self, handle: TagHandle) -> WidgetMessage {
-        self.build(Action::ExitTag(handle))
+    fn exit(&self, handle: TagHandle) -> UniversalMsg {
+        self.build(Event::ExitTag(handle))
     }
 
-    fn next_tag(&self) -> WidgetMessage {
-        self.build(Action::NextTag)
+    fn next_tag(&self) -> UniversalMsg {
+        self.build(Event::NextTag)
     }
 
-    fn prev_tag(&self) -> WidgetMessage {
-        self.build(Action::PrevTag)
+    fn prev_tag(&self) -> UniversalMsg {
+        self.build(Event::PrevTag)
     }
 
-    fn small_scroll(&self) -> WidgetMessage {
-        self.build(Action::SmallScroll)
+    fn small_scroll(&self) -> UniversalMsg {
+        self.build(Event::SmallScroll)
+    }
+
+    fn active_changed(&self, handle: TagHandle, active: bool) -> UniversalMsg {
+        self.build(Event::ActiveChanged(handle, active))
     }
 }
