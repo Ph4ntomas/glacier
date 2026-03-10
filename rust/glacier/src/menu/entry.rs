@@ -1,498 +1,380 @@
-//! Menu children/
-
-use std::marker::PhantomData;
-
 use snowcap_api::{
-    popup::Parent,
+    signal::Signaler,
+    surface::SurfaceEvent,
     widget::{
-        Alignment, Border, Length, Padding,
+        Border, Length, Program, WidgetDef,
         column::Column,
         container::{self, Container},
         image::{self, Image},
-        row::Row,
-        text::{self, Text},
+        text,
     },
 };
 
-use crate::{
-    color,
-    menu::{
-        Action, Menu, MenuMessage,
-        entry::style::{EntryStyle, SeparatorStyle},
-    },
-    misc::icons,
-    signal::TryWithEmitter,
-};
+use crate::misc::icons;
 
-pub mod style;
-#[doc(inline)]
-pub use style::Style;
+#[derive(Clone, Debug)]
+pub enum Message {
+    Hover,
+    OpenMenu,
+    Submit,
+    Enable(String),
+    Disable(String),
+}
 
-pub fn default_style() -> Style {
-    Style {
-        font_size: None,
-        font: None,
-        default: style::EntryStyle {
-            fg_color: Some(color::from_hex("#d7d7d7")),
-            padding: Some(Padding {
-                left: 2.,
-                right: 2.,
-                ..Default::default()
-            }),
-            ..Default::default()
-        },
-        active: Some(style::EntryStyle {
-            bg_color: Some(color::from_hex("#6B1ABC")),
-            ..Default::default()
-        }),
-        disabled: Some(style::EntryStyle {
-            fg_color: Some(color::from_hex("#5b5b5b")),
-            ..Default::default()
-        }),
-        menu_indicator: Some(style::MenuIndicatorStyle {
-            width: Some(Length::Fixed(12.)),
-            height: Some(Length::Fixed(12.)),
-            color: Some(color::from_hex("#7b7b7b")),
-        }),
-        separator: Some(style::SeparatorStyle {
-            fg_color: Some(color::from_hex("#131313")),
-            height: Some(Length::Fixed(1.)),
-            padding: Some(Padding {
-                top: 3.,
-                right: 3.,
-                bottom: 8.,
-                left: 8.,
-            }),
-            thickness: Some(1.),
-            ..Default::default()
-        }),
+type Child<Msg> = Box<dyn Program<Message = Msg> + Send>;
+
+pub struct View<Msg>(Box<dyn Fn() -> WidgetDef<Msg> + Send>);
+
+pub fn view<F, Msg>(view: F) -> View<Msg>
+where
+    F: Fn() -> WidgetDef<Msg> + Send + 'static,
+{
+    View(Box::new(view))
+}
+
+impl<Msg> Program for View<Msg> {
+    type Message = Msg;
+
+    fn view(&self) -> Option<WidgetDef<Self::Message>> {
+        Some(self.0())
     }
+
+    fn update(&mut self, _msg: Self::Message) {}
 }
 
-pub fn default_entry_view<Msg>(
-    entry: &impl Entry,
-    active: bool,
-    style: &Style,
-) -> Option<snowcap_api::widget::WidgetDef<Msg>> {
-    let EntryStyle {
-        fg_color,
-        bg_color,
-        height,
-        padding,
-        border,
-    } = EntryState::from_entry(entry, active).get_entry_style(style);
-
-    let label = Text::new(entry.label())
-        .style(text::Style {
-            color: fg_color,
-            font: style.font.clone(),
-            pixels: style.font_size,
-        })
-        .width(Length::Fill);
-
-    let mut container = Container::new(label)
-        .clip(true)
-        .style(container::Style {
-            background: bg_color.map(From::from),
-            border,
-            ..Default::default()
-        })
-        .vertical_alignment(Alignment::Center);
-
-    container.padding = padding;
-    container.height = height;
-    container.width = Some(Length::Fill);
-
-    Some(container.into())
-}
-
-pub fn default_menu_view<Msg>(
-    entry: &impl Entry,
-    active: bool,
-    style: &Style,
-) -> Option<snowcap_api::widget::WidgetDef<Msg>> {
-    let EntryStyle {
-        fg_color,
-        bg_color,
-        height,
-        padding,
-        border,
-    } = EntryState::from_entry(entry, active).get_entry_style(style);
-    let icon_style = style.menu_indicator.clone().unwrap_or_default();
-
-    let label = Text::new(entry.label())
-        .style(text::Style {
-            color: fg_color,
-            font: style.font.clone(),
-            pixels: style.font_size,
-        })
-        .width(Length::Fill);
-
-    let icon_handle = icons::menu::menu_indicator().to_image_handle(icon_style.color.or(fg_color));
-    let mut icon = Image::new(icon_handle).content_fit(image::ContentFit::ScaleDown);
-
-    icon.height = icon_style.height;
-    icon.width = icon_style.width;
-
-    let mut container = Container::new(
-        Row::new_with_children([label.into(), icon.into()]).item_alignment(Alignment::Center),
-    )
-    .clip(true)
-    .style(container::Style {
-        background: bg_color.map(From::from),
-        border,
-        ..Default::default()
+pub fn label<Msg>(label: impl Into<String>) -> View<Msg> {
+    view({
+        let label = label.into();
+        move || text::Text::new(label.clone()).into()
     })
-    .vertical_alignment(Alignment::Center);
-
-    container.padding = padding;
-    container.height = height;
-    container.width = Some(Length::Fill);
-
-    Some(container.into())
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum EntryState {
-    Active,
-    Disabled,
-    Default,
+enum Kind<Msg> {
+    Menu(Child<Msg>),
+    Standard(Child<Msg>),
+    Separator,
 }
 
-impl EntryState {
-    pub fn from_entry(entry: &impl Entry, active: bool) -> Self {
-        if entry.disabled() {
-            Self::Disabled
-        } else if active {
-            Self::Active
-        } else {
-            Self::Default
+pub struct Entry<Msg> {
+    id: Option<String>,
+    kind: Kind<Msg>,
+    disabled: bool,
+    close_on_submit: bool,
+}
+
+impl<Msg> Entry<Msg> {
+    pub fn standard<C>(child: C) -> Self
+    where
+        C: Program<Message = Msg> + Send + 'static,
+    {
+        Self {
+            id: None,
+            kind: Kind::Standard(Box::new(child)),
+            disabled: false,
+            close_on_submit: true,
         }
     }
 
-    pub fn get_entry_style(self, style: &Style) -> style::EntryStyle {
-        let default = style.default.clone();
+    pub fn menu<C>(child: C) -> Self
+    where
+        C: Program<Message = Msg> + Send + 'static,
+    {
+        Self {
+            id: None,
+            kind: Kind::Menu(Box::new(child)),
+            disabled: false,
+            close_on_submit: false,
+        }
+    }
 
-        let EntryStyle {
-            fg_color,
-            bg_color,
-            height,
-            padding,
-            border,
-        } = match self {
-            Self::Default => {
-                return default;
-            }
-            Self::Active => style.active.clone().unwrap_or_default(),
-            Self::Disabled => style.disabled.clone().unwrap_or_default(),
+    pub fn separator() -> Self {
+        Self {
+            id: None,
+            kind: Kind::Separator,
+            disabled: true,
+            close_on_submit: false,
+        }
+    }
+
+    pub fn id(self, id: impl Into<String>) -> Self {
+        Self {
+            id: Some(id.into()),
+            ..self
+        }
+    }
+
+    pub fn disable(self) -> Self {
+        Self {
+            disabled: true,
+            ..self
+        }
+    }
+
+    pub fn close_on_submit(self, close_on_submit: bool) -> Self {
+        Self {
+            close_on_submit,
+            ..self
+        }
+    }
+
+    pub fn is_disabled(&self) -> bool {
+        matches!(self.kind, Kind::Separator) || self.disabled
+    }
+
+    pub fn is_standard(&self) -> bool {
+        matches!(self.kind, Kind::Standard(_))
+    }
+
+    pub fn is_menu(&self) -> bool {
+        matches!(self.kind, Kind::Menu(_))
+    }
+
+    pub fn is_separator(&self) -> bool {
+        matches!(self.kind, Kind::Separator)
+    }
+
+    pub fn should_close_on_submit(&self) -> bool {
+        self.is_standard() && self.close_on_submit
+    }
+
+    fn child(&self) -> Option<&Child<Msg>> {
+        match &self.kind {
+            Kind::Standard(c) | Kind::Menu(c) => Some(c),
+            _ => None,
+        }
+    }
+
+    fn child_mut(&mut self) -> Option<&mut Child<Msg>> {
+        match &mut self.kind {
+            Kind::Standard(c) | Kind::Menu(c) => Some(c),
+            Kind::Separator => None,
+        }
+    }
+
+    pub(super) fn separator_view(style: &super::style::Separator) -> WidgetDef<Msg> {
+        let separator = Container::new(Column::new())
+            .width(Length::Fill)
+            .height(Length::Fixed(style.thickness))
+            .style(container::Style {
+                background: style.bg_color.map(From::from),
+                border: Some(Border {
+                    color: style.fg_color,
+                    width: Some(style.thickness),
+                    radius: None,
+                }),
+                ..Default::default()
+            });
+
+        let container = Container::new(separator).padding(style.padding);
+
+        container.into()
+    }
+
+    pub(super) fn menu_indicator_view(
+        style: &super::style::MenuIndicator,
+        disabled: bool,
+        selected: bool,
+    ) -> WidgetDef<Msg> {
+        let fg_color = if disabled {
+            style.color_disabled.or(style.color)
+        } else if selected {
+            style.color_selected.or(style.color)
+        } else {
+            style.color
         };
 
-        EntryStyle {
-            fg_color: fg_color.or(default.fg_color),
-            bg_color: bg_color.or(default.bg_color),
-            height: height.or(default.height),
-            padding: padding.or(default.padding),
-            border: border.or(default.border),
-        }
+        let icon_handle = icons::menu::menu_indicator().to_image_handle(fg_color);
+        let mut icon = Image::new(icon_handle).content_fit(image::ContentFit::ScaleDown);
+
+        icon.height = style.height;
+        icon.width = style.width;
+
+        icon.into()
     }
 }
 
-pub trait Entry: TryWithEmitter {
-    type Message: Clone;
-    type Menu;
-
-    fn key(&self) -> &str;
-    fn set_key(&mut self, key: String);
-
-    fn activate(&mut self, hover: bool) -> Option<Self::Message> {
-        let _ = hover;
-        None
-    }
-
-    fn deactivate(&mut self) {}
-
-    fn label(&self) -> &str;
-    fn disabled(&self) -> bool {
-        true
-    }
-
-    fn view(
-        &self,
-        active: bool,
-        style: &Style,
-    ) -> Option<snowcap_api::widget::WidgetDef<Self::Message>>;
-
-    fn update(&mut self, msg: Self::Message, parent: Option<Parent>) {
-        let _ = msg;
-        let _ = parent;
-    }
-
-    fn submit(&self) -> Option<Self::Message> {
-        None
-    }
-
-    fn open_menu(&self) -> Option<Self::Menu> {
-        None
-    }
-}
-
-pub struct SimpleEntry<Msg> {
-    key: String,
-    label: String,
-    on_submit: Option<Box<dyn Fn() -> Option<MenuMessage<Msg>> + Sync + Send>>,
-}
-
-impl<Msg> SimpleEntry<Msg> {
-    pub fn new<F>(label: impl ToString, on_submit: F) -> Self
-    where
-        F: Fn() -> Option<MenuMessage<Msg>> + Sync + Send + 'static,
-    {
-        Self {
-            key: Default::default(),
-            label: label.to_string(),
-            on_submit: Some(Box::new(on_submit)),
-        }
-    }
-
-    pub fn new_from_part<F>(label: impl ToString, on_submit: Option<F>) -> Self
-    where
-        F: Fn() -> Option<MenuMessage<Msg>> + Sync + Send + 'static,
-    {
-        Self {
-            key: Default::default(),
-            label: label.to_string(),
-            on_submit: if let Some(on_submit) = on_submit {
-                Some(Box::new(on_submit))
-            } else {
-                None
-            },
-        }
-    }
-
-    pub fn new_disabled(label: impl ToString) -> Self {
-        Self {
-            key: Default::default(),
-            label: label.to_string(),
-            on_submit: None,
-        }
-    }
-}
-
-impl<Msg> TryWithEmitter for SimpleEntry<Msg> {
-    fn try_with_emitter(&self) -> Option<crate::signal::Emitter> {
-        None
-    }
-}
-
-impl<Msg> Entry for SimpleEntry<Msg>
+impl<Msg> Program for Entry<Msg>
 where
-    Msg: Clone,
+    Msg: TryInto<super::Message> + From<super::Message> + Clone + 'static,
 {
-    type Message = MenuMessage<Msg>;
-    type Menu = Menu<Msg>;
+    type Message = Msg;
 
-    fn key(&self) -> &str {
-        &self.key
+    fn view(&self) -> Option<snowcap_api::widget::WidgetDef<Self::Message>> {
+        self.child().and_then(|c| c.view())
     }
 
-    fn set_key(&mut self, key: String) {
-        self.key = key;
-    }
+    fn update(&mut self, msg: Self::Message) {
+        use super::Message as MenuMsg;
+        let is_menu = self.is_menu();
+        let is_standard = self.is_standard();
 
-    fn label(&self) -> &str {
-        &self.label
-    }
+        if let Some(child) = self.child_mut() {
+            let entry_msg = match msg.clone().try_into() {
+                Err(_) => {
+                    child.update(msg);
+                    return;
+                }
+                Ok(MenuMsg::Menu { .. }) => {
+                    return;
+                }
+                Ok(MenuMsg::Entry(msg)) => msg,
+            };
 
-    fn disabled(&self) -> bool {
-        self.on_submit.is_none()
-    }
-
-    fn submit(&self) -> Option<Self::Message> {
-        let on_submit = self.on_submit.as_ref()?;
-
-        on_submit().or(Some(Action::Close.into()))
-    }
-
-    fn view(
-        &self,
-        active: bool,
-        style: &Style,
-    ) -> Option<snowcap_api::widget::WidgetDef<Self::Message>> {
-        default_entry_view(self, active, style)
-    }
-}
-
-pub struct SimpleMenu<Msg> {
-    key: String,
-    label: String,
-    on_open_menu: Option<Box<dyn Fn() -> Option<Menu<Msg>> + Sync + Send>>,
-}
-
-impl<Msg> SimpleMenu<Msg> {
-    pub fn new<F>(label: impl ToString, on_open_menu: F) -> Self
-    where
-        F: Fn() -> Option<Menu<Msg>> + Sync + Send + 'static,
-    {
-        Self {
-            key: Default::default(),
-            label: label.to_string(),
-            on_open_menu: Some(Box::new(on_open_menu)),
+            match entry_msg {
+                Message::Submit | Message::OpenMenu if is_menu => {
+                    child.update(super::Message::Entry(Message::OpenMenu).into());
+                }
+                Message::Submit if is_standard => {
+                    child.update(msg);
+                }
+                Message::Hover => {
+                    child.update(msg);
+                }
+                Message::Enable(id) if Some(id.as_str()) == self.id.as_deref() => {
+                    self.disabled = false;
+                }
+                Message::Disable(id) if Some(id.as_str()) == self.id.as_deref() => {
+                    self.disabled = false;
+                }
+                _ => (),
+            };
         }
     }
 
-    pub fn new_from_part<F>(label: impl ToString, on_open_menu: Option<F>) -> Self
-    where
-        F: Fn() -> Option<Menu<Msg>> + Sync + Send + 'static,
-    {
-        Self {
-            key: Default::default(),
-            label: label.to_string(),
-            on_open_menu: if let Some(on_open_menu) = on_open_menu {
-                Some(Box::new(on_open_menu))
-            } else {
-                None
-            },
+    fn event(&mut self, event: snowcap_api::surface::SurfaceEvent<Self::Message>) {
+        if let Some(child) = self.child_mut() {
+            child.event(event);
         }
     }
 
-    pub fn new_disabled(label: impl ToString) -> Self {
-        Self {
-            key: Default::default(),
-            label: label.to_string(),
-            on_open_menu: None,
-        }
+    fn signaler(&self) -> Option<snowcap_api::signal::Signaler> {
+        self.child().and_then(|c| c.signaler())
     }
 }
 
-impl<Msg> TryWithEmitter for SimpleMenu<Msg> {
-    fn try_with_emitter(&self) -> Option<crate::signal::Emitter> {
-        None
-    }
+type SubmitCallback = Box<dyn FnMut() + Send>;
+struct Standard<Msg> {
+    child: Child<Msg>,
+    callback: SubmitCallback,
 }
 
-impl<Msg> Entry for SimpleMenu<Msg>
+pub fn standard<Msg, C, F>(child: C, submit: F) -> Entry<Msg>
 where
-    Msg: Clone,
+    Msg: TryInto<super::Message> + Clone + 'static,
+    C: Program<Message = Msg> + Send + 'static,
+    F: FnMut() + Send + 'static,
 {
-    type Message = MenuMessage<Msg>;
-    type Menu = Menu<Msg>;
+    let program = Standard {
+        child: Box::new(child),
+        callback: Box::new(submit),
+    };
 
-    fn key(&self) -> &str {
-        &self.key
+    Entry::standard(program)
+}
+
+impl<Msg> Program for Standard<Msg>
+where
+    Msg: TryInto<super::Message> + Clone,
+{
+    type Message = Msg;
+
+    fn view(&self) -> Option<WidgetDef<Self::Message>> {
+        self.child.view()
     }
 
-    fn set_key(&mut self, key: String) {
-        self.key = key;
+    fn event(&mut self, event: SurfaceEvent<Self::Message>) {
+        self.child.event(event)
     }
 
-    fn label(&self) -> &str {
-        &self.label
+    fn signaler(&self) -> Option<Signaler> {
+        self.child.signaler()
     }
 
-    fn disabled(&self) -> bool {
-        self.on_open_menu.is_none()
-    }
-
-    fn activate(&mut self, hover: bool) -> Option<Self::Message> {
-        if hover {
-            Some(Action::OpenMenu.into())
+    fn update(&mut self, msg: Self::Message) {
+        if let Ok(Message::Submit) = msg
+            .clone()
+            .try_into()
+            .map_err(|_| ())
+            .and_then(|msg: super::Message| msg.try_into())
+        {
+            (self.callback)()
         } else {
-            None
+            self.child.update(msg);
         }
     }
-
-    fn submit(&self) -> Option<Self::Message> {
-        if self.disabled() {
-            None
-        } else {
-            Some(Action::OpenMenu.into())
-        }
-    }
-
-    fn open_menu(&self) -> Option<Self::Menu> {
-        let open_menu = self.on_open_menu.as_ref()?;
-
-        open_menu()
-    }
-
-    fn view(
-        &self,
-        active: bool,
-        style: &Style,
-    ) -> Option<snowcap_api::widget::WidgetDef<Self::Message>> {
-        default_menu_view(self, active, style)
-    }
 }
 
-#[derive(Debug, Clone)]
-pub struct Separator<Msg>(PhantomData<Msg>);
-
-impl<Msg> Separator<Msg> {
-    pub fn new() -> Self {
-        Self(PhantomData)
-    }
+type OpenCallback<Msg> = Box<dyn Fn() -> super::Menu<Msg> + Send>;
+struct Submenu<Msg> {
+    child: Child<Msg>,
+    callback: OpenCallback<Msg>,
+    signaler: Option<Signaler>,
 }
 
-impl<Msg> Default for Separator<Msg> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<Msg> TryWithEmitter for Separator<Msg> {
-    fn try_with_emitter(&self) -> Option<crate::signal::Emitter> {
-        None
-    }
-}
-
-impl<Msg> Entry for Separator<Msg>
+pub fn submenu<Msg, C, F>(child: C, on_open: F) -> Entry<Msg>
 where
-    Msg: Clone,
+    Msg: TryInto<super::Message> + Clone + Send + 'static,
+    C: Program<Message = Msg> + Send + 'static,
+    F: Fn() -> super::Menu<Msg> + Send + 'static,
 {
-    type Menu = Menu<Msg>;
-    type Message = MenuMessage<Msg>;
+    let signaler = if child.signaler().is_none() {
+        Some(Signaler::new())
+    } else {
+        None
+    };
 
-    fn key(&self) -> &str {
-        "#glacier-entry-menu-separator"
+    let program = Submenu {
+        child: Box::new(child),
+        callback: Box::new(on_open),
+        signaler,
+    };
+
+    Entry::menu(program)
+}
+
+impl<Msg> Program for Submenu<Msg>
+where
+    Msg: TryInto<super::Message> + Clone + Send + 'static,
+{
+    type Message = Msg;
+
+    fn view(&self) -> Option<WidgetDef<Self::Message>> {
+        self.child.view()
     }
 
-    fn set_key(&mut self, _key: String) {}
-
-    fn label(&self) -> &str {
-        ""
+    fn event(&mut self, event: snowcap_api::surface::SurfaceEvent<Self::Message>) {
+        self.child.event(event);
     }
 
-    fn view(
-        &self,
-        _active: bool,
-        style: &Style,
-    ) -> Option<snowcap_api::widget::WidgetDef<Self::Message>> {
-        let SeparatorStyle {
-            fg_color,
-            bg_color,
-            height,
-            padding,
-            thickness,
-        } = style.separator.clone().unwrap_or_default();
+    fn signaler(&self) -> Option<Signaler> {
+        self.child.signaler().or(self.signaler.clone())
+    }
 
-        let mut separator =
-            Container::new(Column::new())
-                .width(Length::Fill)
-                .style(container::Style {
-                    background: bg_color.map(From::from),
-                    border: Some(Border {
-                        color: fg_color,
-                        width: thickness,
-                        radius: None,
-                    }),
-                    ..Default::default()
-                });
+    fn update(&mut self, msg: Self::Message) {
+        if msg.clone().try_into().is_ok() {
+            let menu = (self.callback)();
 
-        separator.height = height;
+            self.signaler()
+                .unwrap()
+                .emit(super::signal::RequestSubmenuOpen::new(menu));
+        } else {
+            self.child.update(msg);
+        }
+    }
+}
 
-        let mut container = Container::new(separator);
-        container.padding = padding;
+pub fn separator<Msg>() -> Entry<Msg> {
+    Entry::separator()
+}
 
-        Some(container.into())
+impl TryFrom<super::Message> for Message {
+    type Error = ();
+
+    fn try_from(value: super::Message) -> Result<Self, Self::Error> {
+        if let super::Message::Entry(msg) = value {
+            Ok(msg)
+        } else {
+            Err(())
+        }
     }
 }
