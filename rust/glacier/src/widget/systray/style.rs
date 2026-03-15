@@ -3,6 +3,8 @@
 //! [SysTray]: super
 use snowcap_api::widget::{Border, Color, Padding};
 
+use crate::menu;
+
 /// Style for [`SysTray`]'s icons.
 ///
 /// [`SysTray`]: super::SysTray
@@ -29,6 +31,12 @@ pub struct Style {
     pub spacing: Option<f32>,
     /// Padding around the icon list.
     pub padding: Option<Padding>,
+
+    /// Style for item's [`Menu`].
+    ///
+    /// [`Menu`]: crate::menu::Menu
+    pub menu: Option<menu::Style>,
+
     /// Style to used when a SysTray icon is active.
     pub active: Option<IconStyle>,
     /// Style to used when a SysTray icon is hovered.
