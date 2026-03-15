@@ -19,6 +19,11 @@ pub mod protocols {
     pub mod status_notifier;
 }
 
+pub mod services {
+    pub mod status_notifier;
+    pub use status_notifier::StatusNotifier;
+}
+
 #[doc(inline)]
 pub use keygrabber::KeyGrabber;
 
