@@ -164,6 +164,65 @@ impl Properties {
     pub fn children_display(&self) -> &str {
         self.children_display.as_deref().unwrap_or_default()
     }
+
+    pub fn update(&mut self, update: Self) {
+        let Self {
+            type_,
+            label,
+            enabled,
+            visible,
+            icon_name,
+            icon_data,
+            toggle_type,
+            toggle_state,
+            children_display,
+        } = update;
+
+        self.type_ = type_.or(self.type_.take());
+        self.label = label.or(self.label.take());
+        self.enabled = enabled.or(self.enabled.take());
+        self.visible = visible.or(self.visible.take());
+        self.icon_name = icon_name.or(self.icon_name.take());
+        self.icon_data = icon_data.or(self.icon_data.take());
+        self.toggle_type = toggle_type.or(self.toggle_type.take());
+        self.toggle_state = toggle_state.or(self.toggle_state.take());
+        self.children_display = children_display.or(self.children_display.take());
+    }
+
+    pub fn remove(&mut self, properties: Vec<String>) {
+        for prop_name in properties {
+            match prop_name.as_str() {
+                "type" => {
+                    self.type_.take();
+                }
+                "label" => {
+                    self.label.take();
+                }
+                "enabled" => {
+                    self.enabled.take();
+                }
+                "visible" => {
+                    self.visible.take();
+                }
+                "icon-name" => {
+                    self.icon_name.take();
+                }
+                "icon-data" => {
+                    self.icon_data.take();
+                }
+                "toggle-type" => {
+                    self.toggle_type.take();
+                }
+                "toggle-state" => {
+                    self.toggle_state.take();
+                }
+                "children-display" => {
+                    self.children_display.take();
+                }
+                _ => (),
+            };
+        }
+    }
 }
 
 impl<'a> serde::Deserialize<'a> for Node {

@@ -1,52 +1,36 @@
-//! StatusNotifierItems implementation.
-//!
-//! [`Item`] represents StatusNotifierItems and their associated DBusMenu.
-use std::sync::{Arc, Mutex, Weak};
+use std::pin::Pin;
 
-use futures::StreamExt;
-use zbus::zvariant;
+use super::menu;
+use crate::protocols::status_notifier::item_proxy::ItemProxy;
+use futures::{StreamExt, prelude::*};
 
-use crate::{
-    BlockOnTokio,
-    protocols::status_notifier::{
-        dbusmenu_proxy::DBusMenuProxy, item_proxy::ItemProxy, layout::Node,
-    },
-};
-
-struct Inner {
-    item_proxy: ItemProxy<'static>,
-    menu_proxy: Option<DBusMenuProxy<'static>>,
-    id: String,
-    title: Option<String>,
-    icon_name: Option<String>,
-    icon_theme_path: Option<String>,
-    icon_pixmap: Vec<Pixmap>,
-    layout: Option<Node>,
-    layout_rev: Option<u32>,
-    name: String,
+#[derive(Clone, Copy, Debug)]
+pub enum Signal {
+    NewTitle,
+    NewIcon,
+    NewAttentionIcon,
+    NewOverlayIcon,
+    NewToolTip,
+    NewMenu,
+    NewStatus(Status),
 }
 
-/// Item implementation.
-#[derive(Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Status {
+    Passive,
+    Active,
+    NeedsAttention,
+    Unknown,
+}
+
+#[derive(Debug, Clone)]
 pub struct Item {
-    state: Arc<Mutex<Inner>>,
-}
-
-/// Non-owning [`Item`].
-#[derive(Clone)]
-pub struct WeakItem(Weak<Mutex<Inner>>);
-
-#[derive(Clone, Debug, zvariant::Value)]
-pub struct Pixmap {
-    pub width: i32,
-    pub height: i32,
-    pub bytes: Vec<u8>,
+    bus_id: String,
+    destination: String,
+    proxy: ItemProxy<'static>,
 }
 
 impl Item {
-    /// Create a new [`Item`].
-    ///
-    /// This function is usually called by a StatusNotifierHost.
     pub async fn new(connection: &zbus::Connection, name: String) -> zbus::Result<Self> {
         let (destination, path) = if let Some(idx) = name.find('/') {
             (&name[..idx], &name[idx..])
@@ -54,224 +38,122 @@ impl Item {
             (name.as_str(), "/StatusNotifierItem")
         };
 
-        let item_proxy = ItemProxy::builder(connection)
+        let proxy = ItemProxy::builder(connection)
             .cache_properties(zbus::proxy::CacheProperties::No)
             .destination(destination.to_string())?
             .path(path.to_string())?
             .build()
             .await?;
 
-        let id = item_proxy.id().await.unwrap();
-        let title = item_proxy.title().await.ok().filter(|s| !s.is_empty());
-        let icon_name = item_proxy.icon_name().await.ok().filter(|s| !s.is_empty());
-        let icon_theme_path = item_proxy
-            .icon_theme_path()
+        let destination = destination.to_owned();
+
+        Ok(Self {
+            bus_id: name,
+            destination,
+            proxy,
+        })
+    }
+
+    pub fn bus_id(&self) -> &str {
+        &self.bus_id
+    }
+
+    pub fn proxy(&self) -> &ItemProxy<'static> {
+        &self.proxy
+    }
+
+    pub async fn menu(&self, connection: &zbus::Connection) -> Option<menu::Menu> {
+        let menu_path = self.proxy.menu().await.ok()?;
+
+        menu::Menu::new(connection, self.destination.as_str(), menu_path)
             .await
             .ok()
-            .filter(|s| !s.is_empty());
-        let icon_pixmap = item_proxy.icon_pixmap().await.unwrap_or_default();
+    }
 
-        let is_menu = item_proxy.item_is_menu().await;
-        let menu_path = item_proxy.menu().await;
-
-        let is_menu = menu_path.is_ok() || is_menu.unwrap_or(false);
-
-        if !is_menu {
-            return Ok(Self {
-                state: Arc::new(Mutex::new(Inner {
-                    item_proxy,
-                    menu_proxy: None,
-                    id,
-                    title,
-                    icon_name,
-                    icon_theme_path,
-                    icon_pixmap,
-                    layout: None,
-                    layout_rev: None,
-                    name,
-                })),
-            });
-        };
-
-        let menu_path = menu_path?;
-        let menu_proxy = DBusMenuProxy::builder(connection)
-            .destination(destination.to_string())?
-            .path(menu_path)?
-            .build()
-            .await?;
-
-        let (rev, layout) = menu_proxy
-            .get_layout(0, -1, &[])
+    pub async fn signal_stream(&self) -> Pin<Box<dyn Stream<Item = Signal> + Send>> {
+        let title_stream = self
+            .proxy
+            .receive_new_title()
             .await
-            .expect("Could not get initial layout.");
+            .expect("Could not setup NewTitle signal stream.")
+            .map(|_| Signal::NewTitle);
 
-        let mut layout_stream = menu_proxy.receive_layout_updated().await.unwrap();
+        let icon_stream = self
+            .proxy
+            .receive_new_icon()
+            .await
+            .expect("Could not setup NewIcon signal stream.")
+            .map(|_| Signal::NewIcon);
 
-        let state = Arc::new(Mutex::new(Inner {
-            item_proxy,
-            menu_proxy: Some(menu_proxy),
-            id,
-            title,
-            icon_name,
-            icon_theme_path,
-            icon_pixmap,
-            layout: Some(layout),
-            layout_rev: Some(rev),
-            name,
-        }));
+        let attention_icon_stream = self
+            .proxy
+            .receive_new_attention_icon()
+            .await
+            .expect("Could not setup NewAttentionIcon signal stream.")
+            .map(|_| Signal::NewAttentionIcon);
 
-        tokio::spawn({
-            let weak = WeakItem(Arc::downgrade(&state));
-            async move {
-                while layout_stream.next().await.is_some() {
-                    let Some(item) = weak.upgrade() else {
-                        break;
-                    };
+        let overlay_icon_stream = self
+            .proxy
+            .receive_new_overlay_icon()
+            .await
+            .expect("Could not setup NewOverlayIcon signal stream.")
+            .map(|_| Signal::NewOverlayIcon);
 
-                    item.refresh_layout_async().await;
-                }
-            }
-        });
+        let tool_tip_stream = self
+            .proxy
+            .receive_new_tool_tip()
+            .await
+            .expect("Could not setup NewToolTip signal stream.")
+            .map(|_| Signal::NewToolTip);
 
-        Ok(Self { state })
-    }
+        let menu_stream = self
+            .proxy
+            .receive_new_menu()
+            .await
+            .expect("Could not setup NewMenu signal stream.")
+            .map(|_| Signal::NewMenu);
 
-    /// Gets the item id.
-    pub fn id(&self) -> String {
-        self.state.lock().unwrap().id.clone()
-    }
+        let status_stream = self
+            .proxy
+            .receive_new_status()
+            .await
+            .expect("Could not setup NewStatus signal stream.")
+            .map(|status| {
+                Signal::NewStatus(
+                    status
+                        .args()
+                        .map(|args| Status::from(args.status))
+                        .unwrap_or(Status::Unknown),
+                )
+            });
 
-    /// Check if an item is a menu.
-    pub fn is_menu(&self) -> bool {
-        self.state.lock().unwrap().menu_proxy.is_some()
-    }
-
-    /// Gets the Item's title.
-    pub fn title(&self) -> Option<String> {
-        self.state.lock().unwrap().title.clone()
-    }
-
-    /// Gets the Item's icon name.
-    pub fn icon_name(&self) -> Option<String> {
-        self.state.lock().unwrap().icon_name.clone()
-    }
-
-    /// Gets an additional path to lookup the icon in.
-    pub fn icon_theme_path(&self) -> Option<String> {
-        self.state.lock().unwrap().icon_theme_path.clone()
-    }
-
-    pub fn with_pixmap<F, Ret>(&self, processor: F) -> Ret
-    where
-        F: FnOnce(&Vec<Pixmap>) -> Ret,
-    {
-        processor(&self.state.lock().unwrap().icon_pixmap)
-    }
-
-    /// Refresh the Item's menu layout.
-    pub async fn refresh_layout_async(&self) {
-        let Some(menu_proxy) = self.menu_proxy() else {
-            return;
-        };
-
-        match menu_proxy.get_layout(0, -1, &[]).await {
-            Ok((rev, layout)) => {
-                let mut guard = self.state.lock().unwrap();
-                guard.layout_rev = Some(rev);
-                guard.layout = Some(layout);
-            }
-            Err(err) => tracing::warn!("Could no get layout: {err}"),
-        }
-    }
-
-    /// Refresh the Item's menu layout.
-    pub fn refresh_layout(&self) {
-        self.refresh_layout_async().block_on_tokio()
-    }
-
-    /// Apply a closure to the item's layout, forwarding the result.
-    pub fn with_layout<F, Ret>(&self, closure: F) -> Ret
-    where
-        F: FnOnce(Option<&Node>) -> Ret,
-    {
-        closure(self.state.lock().unwrap().layout.as_ref())
-    }
-
-    /// Send a hover event to a node of the remote DBusMenu.
-    pub async fn hover_async(&self, node_id: i32) {
-        let Some(menu_proxy) = self.menu_proxy() else {
-            return;
-        };
-
-        let _ = menu_proxy.event(node_id, "hovered", &0i32.into(), 0).await;
-    }
-
-    /// Send a hover event to a node of the remote DBusMenu.
-    pub fn hover(&self, node_id: i32) {
-        self.hover_async(node_id).block_on_tokio()
-    }
-
-    /// Send a click event to a node of the remote DBusMenu.
-    pub async fn click_async(&self, node_id: i32) {
-        let Some(menu_proxy) = self.menu_proxy() else {
-            return;
-        };
-
-        let _ = menu_proxy.event(node_id, "clicked", &0i32.into(), 0).await;
-    }
-
-    /// Send a click event to a node of the remote DBusMenu.
-    pub fn click(&self, node_id: i32) {
-        self.click_async(node_id).block_on_tokio()
-    }
-
-    /// Notifies the remote DBusMenu that it's about to be opened, and refresh the layout if
-    /// needed.
-    pub async fn about_to_show_async(&self) {
-        let Some(menu_proxy) = self.menu_proxy() else {
-            return;
-        };
-
-        match menu_proxy.about_to_show(0).await {
-            Ok(refresh) => {
-                if refresh {
-                    self.refresh_layout_async().await
-                }
-            }
-            Err(err) => tracing::warn!("{err}"),
-        };
-    }
-
-    /// Notifies the remote DBusMenu that it's about to be opened, and refresh the layout if
-    /// needed.
-    pub fn about_to_show(&self) {
-        self.about_to_show_async().block_on_tokio()
-    }
-
-    /// Gets the item's name.
-    pub fn name(&self) -> String {
-        self.state.lock().unwrap().name.clone()
-    }
-
-    /// Gets the item's DBusMenu proxy.
-    pub fn menu_proxy(&self) -> Option<DBusMenuProxy<'static>> {
-        self.state.lock().unwrap().menu_proxy.clone()
-    }
-
-    /// Gets the item's StatusNotifierItem proxy.
-    pub fn proxy(&self) -> ItemProxy<'static> {
-        self.state.lock().unwrap().item_proxy.clone()
-    }
-
-    /// Create a [`WeakItem`] pointing to the same data.
-    pub fn downgrade(&self) -> WeakItem {
-        WeakItem(Arc::downgrade(&self.state))
+        Box::pin(futures::stream_select!(
+            title_stream,
+            icon_stream,
+            attention_icon_stream,
+            overlay_icon_stream,
+            tool_tip_stream,
+            menu_stream,
+            status_stream
+        ))
     }
 }
 
-impl WeakItem {
-    /// Tries to upgrade to an owning [`Item`], returning [None] if the data has been destroyed.
-    pub fn upgrade(&self) -> Option<Item> {
-        self.0.upgrade().map(|state| Item { state })
+impl From<&str> for Status {
+    fn from(value: &str) -> Self {
+        let lowercase = value.to_lowercase();
+
+        match lowercase.as_str() {
+            "passive" => Self::Passive,
+            "active" => Self::Active,
+            "needsattention" => Self::NeedsAttention,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+impl From<String> for Status {
+    fn from(value: String) -> Self {
+        value.as_str().into()
     }
 }

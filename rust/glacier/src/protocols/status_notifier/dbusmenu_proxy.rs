@@ -60,10 +60,7 @@ pub trait DBusMenu {
     #[zbus(signal)]
     fn items_properties_updated(
         &self,
-        updated_props: Vec<(
-            i32,
-            std::collections::HashMap<&str, zbus::zvariant::Value<'_>>,
-        )>,
+        updated_props: Vec<(i32, layout::Properties)>,
         removed_props: Vec<(i32, Vec<&str>)>,
     ) -> zbus::Result<()>;
 

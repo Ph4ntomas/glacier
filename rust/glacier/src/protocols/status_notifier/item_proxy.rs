@@ -11,9 +11,16 @@
 //!
 //! [Writing a client proxy]: https://dbus2.github.io/zbus/client.html
 //! [D-Bus standard interfaces]: https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces,
-use zbus::proxy;
+use zbus::{proxy, zvariant};
 
-use crate::protocols::status_notifier::item::Pixmap;
+#[derive(Clone, Debug, zvariant::Value)]
+pub struct Pixmap {
+    pub width: i32,
+    pub height: i32,
+    pub bytes: Vec<u8>,
+}
+
+//use crate::protocols::status_notifier::item::Pixmap;
 #[proxy(interface = "org.kde.StatusNotifierItem", assume_defaults = true)]
 pub trait Item {
     /// Activate method
@@ -65,7 +72,7 @@ pub trait Item {
 
     /// AttentionIconPixmap property
     #[zbus(property)]
-    fn attention_icon_pixmap(&self) -> zbus::Result<Vec<(i32, i32, Vec<u8>)>>;
+    fn attention_icon_pixmap(&self) -> zbus::Result<Vec<Pixmap>>;
 
     /// AttentionMovieName property
     #[zbus(property)]
@@ -105,7 +112,7 @@ pub trait Item {
 
     /// OverlayIconPixmap property
     #[zbus(property)]
-    fn overlay_icon_pixmap(&self) -> zbus::Result<Vec<(i32, i32, Vec<u8>)>>;
+    fn overlay_icon_pixmap(&self) -> zbus::Result<Vec<Pixmap>>;
 
     /// Status property
     #[zbus(property)]

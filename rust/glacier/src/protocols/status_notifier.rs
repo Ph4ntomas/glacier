@@ -7,5 +7,7 @@ pub mod item;
 pub use item::Item;
 pub mod item_proxy;
 pub mod layout;
+pub mod menu;
+pub use menu::Menu;
 pub mod watcher;
 pub mod watcher_proxy;
