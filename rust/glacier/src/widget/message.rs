@@ -1,30 +1,30 @@
-//! Built-in [`WidgetMessage`]s utilities.
+//! Built-in [`Message`]s utilities.
 
 use std::marker::PhantomData;
 
-use crate::widget::WidgetMessage;
+use snowcap_api::widget::message::{Universal, UniversalMsg};
 
 /// Standard Widget message type.
-#[derive(Clone, Debug)]
-pub struct Message<Action> {
+#[derive(Debug)]
+pub struct Message<Event> {
     /// [`WidgetBase`] id
     ///
-    /// [`WidgetBase`]: crate::widget::base::WidgetBase
+    /// [`WidgetBase`]: snowcap_api::widget::base::WidgetBase
     pub id: u32,
-    /// Custom action to execute on a call to `update`
-    pub action: Action,
+    /// Custom event to handle on a call to `update`
+    pub event: Event,
 }
 
-/// Utility type to build [`WidgetMessage`].
-#[derive(Clone)]
-pub struct MessageBuilder<Action> {
+/// Utility type to build [`UniversalMsg`].
+pub struct MessageBuilder<Event> {
     id: u32,
-    _msg: PhantomData<Action>,
+    _msg: PhantomData<Event>,
 }
 
-impl<Action> MessageBuilder<Action>
+impl<Event> MessageBuilder<Event>
 where
-    Message<Action>: Into<WidgetMessage>,
+    Event: Clone + Send + 'static,
+    //Message<Event>: Universal
 {
     /// Create a new builder for this a widget.
     pub fn new(id: u32) -> Self {
@@ -34,11 +34,32 @@ where
         }
     }
 
-    /// Build a [`WidgetMessage`] from an action.
-    pub fn build(&self, action: Action) -> WidgetMessage {
+    /// Build a [`UniversalMsg`] from an event.
+    pub fn build(&self, event: Event) -> UniversalMsg {
         let id = self.id;
-        Message { id, action }.into()
+
+        Message { id, event }.into_universal()
     }
 }
 
-impl<Action: Clone> Copy for MessageBuilder<Action> {}
+impl<Event> Clone for MessageBuilder<Event> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<Event> Copy for MessageBuilder<Event> {}
+
+impl<Event> Clone for Message<Event>
+where
+    Event: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id,
+            event: self.event.clone(),
+        }
+    }
+}
+
+impl<Event> Universal for Message<Event> where Event: Clone + Send + 'static {}
