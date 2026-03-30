@@ -3,7 +3,6 @@ pub mod keygrabber;
 pub mod logging;
 pub mod menu;
 pub mod modal;
-pub mod signal;
 pub mod util;
 pub mod widget;
 
