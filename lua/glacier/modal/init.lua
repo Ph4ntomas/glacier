@@ -1,6 +1,5 @@
 local Log = require("pinnacle.log")
 
-local textbox = require("glacier.widget.textbox")
 local keygrabber = require("glacier.keygrabber")
 
 ---glacier.modal module.
@@ -81,14 +80,14 @@ local keygrabber = require("glacier.keygrabber")
 ---
 ---    Glacier.bar({
 ---        first = {
----            modal.active_mode,
+---            modal.active_mode(),
 ---            [...]
 ---        },
 ---        center = {
 ---            Glacier.output(output).prompt,
 ---        },
 ---        last = {
----            modal.sequence,
+---            modal.sequence(),
 ---            [...]
 ---        },
 ---        output = output
@@ -164,11 +163,15 @@ local keygrabber = require("glacier.keygrabber")
 ---
 ---@class glacier.modal
 ---@field mt metatable module metatable.
----@field active_mode glacier.widget.textbox.TextBox TextBox displaying the current active_mode.
----@field sequence glacier.widget.textbox.TextBox TextBox displaying the current sequence of input.
 ---
 ---@overload fun(glacier.modal.Config)
 local modal = { mt = {} }
+
+---@enum glacier.modal.signal
+local _signal = {
+    MODE_CHANGED = "glacier.modal.ModeChanged",
+    SEQUENCE_CHANGED = "glacier.modal.SEQUENCE_CHANGED",
+}
 
 ---@package
 ---Holds the current sequence.
@@ -178,6 +181,34 @@ local modal = { mt = {} }
 ---@field content string Current string of input.
 local _sequence = {
     content = "",
+}
+
+---@package
+---Holds the current mode name.
+---
+---When this object is updated, it in turn update `glacier.modal.active_mode`.
+---@class glacier.modal.ActiveMode
+local _active_mode = {
+    mode = "",
+}
+
+---@package
+---
+---Internal state for `glacier.modal`
+---@class (exact) glacier.modal._modal
+---@field sequence glacier.modal.Sequence Current sequence
+---@field active_mode glacier.modal.ActiveMode Active mode name.
+---@field signaler snowcap.signal.Signaler Modal's signaler.
+---@field keygrabber glacier.keygrabber.KeyGrabber KeyGrabber used by `glacier.modal`
+---@field default_mode string Name of the default mode.
+---@field stop_mode string Name of the pseudo mode used when input processing is stopped.
+---@field modes table<string, glacier.modal.Mode> Modes for input processing.
+---@field mt metatable
+local _modal = {
+    ---Current sequence of character.
+    sequence = _sequence,
+    active_mode = _active_mode,
+    modes = {},
 }
 
 ---Add a character at the end of the sequence.
@@ -207,7 +238,7 @@ end
 ---@param content string
 function _sequence:set(content)
     self.content = content
-    modal.sequence:set(self.content)
+    _modal.signaler:emit(_signal.SEQUENCE_CHANGED, self.content)
 end
 
 ---Returns the sequence content.
@@ -217,43 +248,16 @@ function _sequence:get()
     return self.content
 end
 
----@package
----Holds the current mode name.
----
----When this object is updated, it in turn update `glacier.modal.active_mode`.
----@class glacier.modal.ActiveMode
-local _active_mode = {
-    mode = "",
-}
-
 ---Sets the current mode.
 function _active_mode:set(mode)
     self.mode = mode
-    modal.active_mode:set(mode)
+    _modal.signaler:emit(_signal.MODE_CHANGED, self.mode)
 end
 
 ---Retrieve the current mode name.
 function _active_mode:get()
     return self.mode
 end
-
----@package
----
----Internal state for `glacier.modal`
----@class (exact) glacier.modal._modal
----@field sequence glacier.modal.Sequence Current sequence
----@field active_mode glacier.modal.ActiveMode Active mode name.
----@field keygrabber glacier.keygrabber.KeyGrabber KeyGrabber used by `glacier.modal`
----@field default_mode string Name of the default mode.
----@field stop_mode string Name of the pseudo mode used when input processing is stopped.
----@field modes table<string, glacier.modal.Mode> Modes for input processing.
----@field mt metatable
-local _modal = {
-    ---Current sequence of character.
-    sequence = _sequence,
-    active_mode = _active_mode,
-    modes = {},
-}
 
 ---Evaluate the current sequence.
 ---
@@ -322,8 +326,6 @@ local function process_key(_, mods, key, text)
     if eval_sequence(_modal.sequence:get(), mods, _modal.modes[_modal.active_mode:get()]) then
         _modal.sequence:reset()
     end
-
-    modal.sequence:set(_modal.sequence:get())
 end
 
 ---Leave the current mode, and stop processing input.
@@ -588,6 +590,7 @@ function modal.init(config)
 
     config = require("glacier.utils").merge_table(default_config, config)
 
+    _modal.signaler = require("snowcap.signal").Signaler.new()
     _modal.stop_mode = config.stop_mode
     _modal.default_mode = config.default_mode
     _modal.modes = process_modes(config.modes)
@@ -595,9 +598,6 @@ function modal.init(config)
     _modal.keygrabber = keygrabber({
         on_key_press = process_key,
     })
-
-    modal.active_mode = textbox({})
-    modal.sequence = textbox({})
 
     local keybind_mods = {
         "ignore_shift",
@@ -638,6 +638,7 @@ end
 
 modal.start = start
 modal.stop = start
+modal.signals = _signal
 
 ---@diagnostic disable-next-line: param-type-mismatch
 return setmetatable(modal, modal.mt) --[[ @as glacier.modal ]]
