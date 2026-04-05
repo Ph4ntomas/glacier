@@ -163,6 +163,10 @@ impl CommandState {
                 break;
             };
 
+            if m.start() != 0 {
+                break;
+            }
+
             captures.push(m.as_str());
             seq = seq.split_at(m.end()).1;
         }
