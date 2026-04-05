@@ -1,83 +1,40 @@
-local Output = require("pinnacle.output")
-local Log = require("pinnacle.log")
-
+local Layer = require("snowcap.layer")
 local Widget = require("snowcap.widget")
-local Operation = require("snowcap.widget.operation")
 
-local Child = require("glacier.bar.child")
+local color = require("glacier.misc.color")
 
----Override a block view.
+---Glacier's bar module.
 ---
----This function will be called with an array of `snowcap.widget.WidgetDef` (one per child), and
----the `glacier.bar.Style` of the calling bar.
----
----@alias glacier.bar.ViewFn fun(children: snowcap.widget.WidgetDef[], style: glacier.bar.Style): snowcap.widget.WidgetDef
-
----Function that returns a `snowcap.widget.WidgetDef`.
----
----This type can be used to define stateless widgets.
----@alias glacier.bar.WidgetFn fun(): snowcap.widget.WidgetDef
-
----glacier.bar module.
----
----@class glacier.bar
----@field mt metatable This module metatable.
----@field first_view? glacier.bar.ViewFn Global override for Bar's first_view function.
----@field center_view? glacier.bar.ViewFn Global override for Bar's center_view function.
----@field last_view? glacier.bar.ViewFn Global override for Bar's last_view function.
----
----@overload fun(...: glacier.bar.Config): glacier.bar.Bar
-local bar = { mt = {} }
-
----Glacier's Bar.
----
----The bar is split into 3 area, called `first`, `center` and `last`. The default configuration put
----the bar at the top of the screen, and render each areas left to right, with the following rules:
+---The bar is split into 3 area (`first`, `center` and `last`). By default,
+---the bar sits at the top of the screen and renders each areas left to right,
+---using the following layout:
 --- - first: The area shrink to fit its content, which is left-aligned.
---- - center: The area fill the remaining space. Its content is left aligned.
+--- - center: The area fills the space. The content is left-aligned.
 --- - right: The area shrink to fit its content, which is right-aligned.
 ---```
---- -------------------------------------------------------
---- | first    |             center             |    last |
---- -------------------------------------------------------
+---| first     |         center        |     last |
 ---```
 ---
----When a new view is needed, the bar does the following:
---- - call the view() function for each of the child widget, filtering out nil value
---- - call the view function for each of the areas, passing the rendered widgets and the bar style.
---- - create a container that fill the whole width (or height, based on orientation) of the screen,
----   and put each area inside.
+---## Rendering
+---When the bar's view is called, the call first forwarded to every child. Then,
+---the view functions for each area are called with the respective children widgets.
+---Finally, the bar put each area in a container.
 ---
----## Widgets
----The widget can handle stateless widgets, which are defined by a simple function called whenever
----they need to be rendered, or stateful widgets, that derive from `glacier.widget.Base`.
+---@class glacier.bar
+---@field mt metatable The module's metatable
 ---
----Since stateful widget might have their state change during runtime and they might need to react
----to keyboard input, the bar register callbacks for the following signals:
---- - `glacier.widget.signal.redraw_needed`: When this signal is emitted by a widget, the bars
---- re-render itself.
---- - `glacier.widget.signal.request_focus`: When this signal is emitted by a widget, the bar
---- request exclusive keyboard focus, and that the specific widget be focused by snowcap.
---- - `glacier.widget.signa.request_unfocus`: When this signal is emitted by a widget, the bar
---- request all widget to be unfocused, and set it's exclusive keyboard state to NONE.
----
----## Planned feature:
---- - Bar position and orientation.
---- - Advanced keyboard interaction for widgets.
----
----@class glacier.bar.Bar: snowcap.widget.Program,glacier.Surface
----@field style glacier.bar.Style Bar style
----@field first_view glacier.bar.ViewFn Function to call to render the first block.
----@field center_view glacier.bar.ViewFn Function to call to render the central block.
----@field last_view glacier.bar.ViewFn Function to call to render the last block.
----@field first glacier.bar.Child[]
----@field center glacier.bar.Child[]
----@field last glacier.bar.Child[]
----@field private handle snowcap.layer.LayerHandle
-local Bar = {}
+---@overload fun(...: glacier.bar.Config): glacier.bar.Bar
+local _bar = { mt = {} }
+
+----------------------
+-- Type definitions --
+----------------------
+
+---Override a block view.
+---@alias glacier.bar.ViewFn fun(children: snowcap.widget.WidgetDef[], style: glacier.bar.Style): snowcap.widget.WidgetDef?
 
 ---@class glacier.bar.Style
----@field dimension? integer Dimension of the bar, in pixel.
+---@field pixels? integer Dimension of the bar, in pixel.
 ---@field padding? snowcap.widget.Padding Bar padding.
 ---@field bg_color? snowcap.widget.Color Bar background color.
 ---@field border? snowcap.widget.Border Bar's border.
@@ -86,170 +43,122 @@ local Bar = {}
 ---@field center_spacing? number Spacing between center block.
 ---@field last_spacing? number Spacing between last block.
 
----Render a list of children.
+---Glacier's Bar
 ---
----@protected
----@param children glacier.bar.Child[]
----@return snowcap.widget.WidgetDef[]
-function Bar:view_children(children)
-    children = children or {}
-
-    local views = {}
-
-    for _, child in pairs(children) do
-        local view = child:view()
-
-        if view then
-            table.insert(views, view)
-        end
-    end
-
-    return views
-end
-
----Default `glacier.bar.ViewFn` to render the first area of the bar.
+---See module-level documentation for more informations.
 ---
----@param children snowcap.widget.WidgetDef[] A list of already rendered children
----@param style glacier.bar.Style Style of the calling bar.
----@return snowcap.widget.WidgetDef
-function bar.default_first_view(children, style)
-    return Widget.row({
-        height = Widget.length.Fill,
-        item_alignment = Widget.alignment.START,
-        spacing = style.first_spacing,
-        width = Widget.length.Shrink,
-        children = children,
-    })
-end
-
----Default `glacier.bar.ViewFn` to render the middle area of the bar.
+---@class glacier.bar.Bar: snowcap.widget.Program
+---@field handle snowcap.widget.SurfaceHandle?
 ---
----@param children snowcap.widget.WidgetDef[] A list of already rendered children
----@param style glacier.bar.Style Style of the calling bar.
----@return snowcap.widget.WidgetDef
-function bar.default_center_view(children, style)
-    return Widget.row({
-        height = Widget.length.Fill,
-        item_alignment = Widget.alignment.START,
-        spacing = style.center_spacing,
-        width = Widget.length.Fill,
-        children = children,
-    })
-end
-
----Default `glacier.bar.ViewFn` to render the last area of the bar.
+---@field style glacier.bar.Style
 ---
----@param children snowcap.widget.WidgetDef[] A list of already rendered children
----@param style glacier.bar.Style Style of the calling bar.
----@return snowcap.widget.WidgetDef
-function bar.default_last_view(children, style)
-    return Widget.row({
-        height = Widget.length.Fill,
-        item_alignment = Widget.alignment.END,
-        spacing = style.last_spacing,
-        width = Widget.length.Shrink,
-        children = children,
-    })
-end
-
----Render this bar.
+---@field first snowcap.widget.Program[]
+---@field center snowcap.widget.Program[]
+---@field last snowcap.widget.Program[]
 ---
----@protected
----@return snowcap.widget.WidgetDef
-function Bar:view()
-    local first_children = self:view_children(self.first)
-    local center_children = self:view_children(self.center)
-    local last_children = self:view_children(self.last)
+---@field first_view glacier.bar.ViewFn
+---@field center_view glacier.bar.ViewFn
+---@field last_view glacier.bar.ViewFn
+local Bar = {}
+setmetatable(Bar, { __index = require("snowcap.widget.base").Base })
 
-    local view = Widget.container({
-        width = Widget.length.Fill,
-        valign = Widget.alignment.START,
-        haligh = Widget.alignment.START,
-        padding = self.style.padding,
-        style = {
-            background = Widget.background.Color(self.style.bg_color),
-            border = {
-                width = self.style.border.width,
-                color = self.style.border.color,
-            },
+---@class glacier.bar.Handle
+---@field handle snowcap.layer.LayerHandle
+local Handle = {}
+
+---Bar's configuration.
+---
+---@class glacier.bar.Config
+---@field style? glacier.bar.Style Bar's style
+---
+---@field first? snowcap.widget.Program[] Array of Program for the first area.
+---@field center? snowcap.widget.Program[] Array of Program for the center area.
+---@field last? snowcap.widget.Program[] Array of Program for the last area.
+---
+---@field first_view? glacier.bar.ViewFn First area render function.
+---@field center_view? glacier.bar.ViewFn Center area render function.
+---@field last_view? glacier.bar.ViewFn Last area render function.
+local Config = {}
+
+---------------------------
+-- Default configuration --
+---------------------------
+
+---Bars' default style.
+---
+---@return glacier.bar.Style
+function _bar.default_style()
+    ---@type glacier.bar.Style
+    return {
+        pixels = 24,
+        padding = {
+            top = 8,
+            bottom = 8,
+            left = 8,
+            right = 8,
         },
-        child = Widget.row({
-            item_alignment = Widget.alignment.START,
-            spacing = self.style.spacing,
-            height = Widget.length.Fixed(self.style.dimension),
-            children = {
-                self.first_view(first_children, self.style),
-                self.center_view(center_children, self.style),
-                self.last_view(last_children, self.style),
-            },
-        }),
-    })
-
-    return view
+        bg_color = color.from_hex("#1a1a1a"),
+    }
 end
 
----Update a list of children.
+---Default view for the Bar's first area.
 ---
----@protected
----@param children glacier.bar.Child[] Children to update.
----@param msg any Message to pass to the children.
-function Bar:update_children(children, msg)
-    children = children or {}
-
-    for _, child in pairs(children) do
-        child:update(msg, self)
-    end
-end
-
----Focus this bar.
----
----This function updates the bar's layer keyboard_interactivity.
----@param focus boolean If true, set the layer interactivity to EXCLUSIVE.
-function Bar:focus(focus)
-    local Layer = require("snowcap.layer")
-
-    local interactivity = focus and Layer.keyboard_interactivity.EXCLUSIVE
-        or Layer.keyboard_interactivity.NONE
-
-    self.handle:update({
-        keyboard_interactivity = interactivity,
+---@param children snowcap.widget.WidgetDef
+---@param style glacier.bar.Style
+---@return snowcap.widget.WidgetDef
+function _bar.default_first_view(children, style)
+    return Widget.row({
+        children = children,
+        height = Widget.length.Fill,
+        width = Widget.length.Shrink,
+        item_alignment = Widget.alignment.START,
+        spacing = style.first_spacing or style.spacing,
     })
 end
 
----Update this bar
+---Default view for the Bar's center area.
 ---
----@protected
----@param msg any The message the bar is getting updated with.
-function Bar:update(msg)
-    local focusable = require("glacier.widget.operation").focusable
-
-    if msg == nil then
-        return
-    end
-
-    if msg.operation == focusable.FOCUS then
-        self:focus(true)
-        self.handle:operate(Operation.focusable.Focus(msg.id))
-        return
-    elseif msg.operation == focusable.UNFOCUS then
-        self:focus(false)
-    end
-
-    self:update_children(self.first, msg)
-    self:update_children(self.center, msg)
-    self:update_children(self.last, msg)
+---@param children snowcap.widget.WidgetDef
+---@param style glacier.bar.Style
+---@return snowcap.widget.WidgetDef
+function _bar.default_center_view(children, style)
+    return Widget.row({
+        children = children,
+        height = Widget.length.Fill,
+        width = Widget.length.Fill,
+        item_alignment = Widget.alignment.START,
+        spacing = style.center_spacing or style.spacing,
+    })
 end
 
----Show the bar.
+---Default view for the Bar's last area.
 ---
----This function create a new Layer for this bar.
+---@param children snowcap.widget.WidgetDef
+---@param style glacier.bar.Style
+---@return snowcap.widget.WidgetDef
+function _bar.default_last_view(children, style)
+    return Widget.row({
+        children = children,
+        height = Widget.length.Fill,
+        width = Widget.length.Shrink,
+        item_alignment = Widget.alignment.START,
+        spacing = style.last_spacing or style.spacing,
+    })
+end
+
+--------------------------
+-- Bar's public methods --
+--------------------------
+
+---Create a layer to display the `Bar` as a standalone program.
+---
+---@return glacier.bar.Handle?
 function Bar:show()
-    local Layer = require("snowcap.layer")
     local handle = Layer.new_widget({
         program = self,
         anchor = Layer.anchor.TOP,
         keyboard_interactivity = Layer.keyboard_interactivity.NONE,
-        exclusive_zone = self.style.dimension + self.style.padding.top + self.style.padding.bottom,
+        exclusive_zone = self:get_exclusive_size(),
         layer = Layer.zlayer.TOP,
     })
 
@@ -257,190 +166,224 @@ function Bar:show()
         return
     end
 
-    self.handle = handle
+    return Handle.new(handle)
+end
 
-    self.handle:on_key_event(function(_, event)
-        local focusable = require("glacier.widget.operation").focusable
-        local Keys = require("snowcap.input.keys")
+---------------------------
+-- Bar's private methods --
+---------------------------
 
-        if event.pressed and event.key == Keys.Escape then
-            self:send_message(focusable.Unfocus())
+---@private
+---
+---Compute the bar's exclusive size.
+---
+---@return number
+function Bar:get_exclusive_size()
+    local padding = self.style.padding or { top = 0, bottom = 0, left = 0, right = 0 }
+    local padding_sz = padding.top + padding.bottom
+
+    local pixels = self.style.pixels or 0
+
+    return math.max(padding_sz + pixels, 1)
+end
+
+---@private
+---
+---Apply a function on every children.
+---@param callback fun(child: snowcap.widget.Program)
+function Bar:foreach_children(callback)
+    for _, child in ipairs(self.first) do
+        callback(child)
+    end
+
+    for _, child in ipairs(self.center) do
+        callback(child)
+    end
+
+    for _, child in ipairs(self.last) do
+        callback(child)
+    end
+end
+
+---@private
+---
+---Render every children in a children array.
+---@param children snowcap.widget.Program[]
+---@return snowcap.widget.WidgetDef[]
+function Bar:view_children(children)
+    local ret = {}
+
+    for _, child in ipairs(children) do
+        local tmp = child:view()
+
+        if tmp ~= nil then
+            table.insert(ret, tmp)
         end
+    end
+
+    return ret
+end
+
+--------------------------------
+-- impl snowcap.widget.Progam --
+--------------------------------
+
+---Creates a widget definition for display by Snowcap.
+---
+---A widget may return nil to notify its parent program that it has
+---nothing to display. It's up to the parent to decide whether to display a
+---placeholder or to remove the widget from the tree.
+---@return snowcap.widget.WidgetDef?
+function Bar:view()
+    local first = self:view_children(self.first)
+    local center = self:view_children(self.center)
+    local last = self:view_children(self.last)
+
+    local first_view_fn = self.first_view or _bar.default_first_view
+    local center_view_fn = self.center_view or _bar.default_center_view
+    local last_view_fn = self.last_view or _bar.default_last_view
+
+    local first_view = first_view_fn(first, self.style)
+    local center_view = center_view_fn(center, self.style)
+    local last_view = last_view_fn(last, self.style)
+
+    local view = Widget.container({
+        child = Widget.row({
+            children = { first_view, center_view, last_view },
+            spacing = self.style.spacing,
+            item_alignment = Widget.alignment.START,
+            height = Widget.length.Fixed(self.style.pixels or 0),
+        }),
+        width = Widget.length.Fill,
+        halign = Widget.alignment.START,
+        valign = Widget.alignment.START,
+        padding = self.style.padding,
+        clip = true,
+        style = {
+            background = Widget.background.Color(self.style.bg_color),
+            border = self.style.border,
+        },
+    })
+
+    return view
+end
+
+---Updates this widget program with the received message.
+---@param msg any
+function Bar:update(msg)
+    self:foreach_children(function(c)
+        c:update(msg)
     end)
 end
 
----Send a message to the bar.
+---Called when a surface has been created with this program.
 ---
----This function will call the bar's layer send_message, which will call the bar update function
----then trigger a re-render of the bar.
+---A surface handle is provided to allow the program to manupulate
+---the surface. This handle should be passed to any child programs
+---to allow them to use it as well.
 ---
----@param msg? any The message to send to the bar.
-function Bar:send_message(msg)
-    self.handle:send_message(msg)
-end
+---@param event snowcap.widget.SurfaceEvent
+function Bar:event(event)
+    local signal = require("snowcap.widget.signal")
 
----Process a list of widgets for this bar.
----
----If the widget inherit from `glacier.widget.Base`, the bar call `glacier.widget.Base:connect()`
----to handle the following signals:
---- - glacier.widget.signal.redraw_needed
---- - glacier.widget.signal.request_focus
---- - glacier.widget.signal.request_unfocus
----
----If the widget is a function, it's wrapped in a `glacier.bar.Child` with a no-op update function.
----
----@protected
----@param children (glacier.widget.Base|glacier.bar.WidgetFn)[]
----@return glacier.bar.Child[]
-function Bar:process_children(children)
-    children = children or {}
+    if event.created then
+        self.handle = event.created
 
-    local processed = {}
-    local signals = require("glacier.widget.signal")
-    local oper = require("glacier.widget.operation").focusable
-
-    local callbacks = {
-        [signals.redraw_needed] = function()
-            self:send_message()
-        end,
-        [signals.request_focus] = function(identifier)
-            self:send_message(oper.Focus(identifier))
-        end,
-        [signals.request_unfocus] = function()
-            self:send_message(oper.Unfocus())
-        end,
-        [signals.send_message] = function(msg)
-            self:send_message(msg)
-        end,
-    }
-
-    for _, v in pairs(children) do
-        ---@type glacier.bar.Child
-        local child = nil
-
-        if type(v) == "function" then
-            child = Child:from_function(v)
-        elseif type(v) == "table" then ---@diagnostic disable-line
-            local widget = v
-
-            local ok, err = pcall(function()
-                for k, cb in pairs(callbacks) do
-                    widget:connect(k, cb)
-                end
-            end)
-
-            if not ok then
-                Log.error("Failed to register callback for '" .. tostring(child) .. "':" .. err)
-            end
-
-            child = widget
-        end
-
-        if child ~= nil then
-            table.insert(processed, child)
-        end
+        self:foreach_children(function(c)
+            self:register_child(c)
+        end)
+    elseif event.closing then
+        self:emit(signal.closed)
     end
 
-    return processed
+    self:foreach_children(function(c)
+        c:event(event)
+    end)
 end
 
----Create a new bar.
+---------------------------
+-- Handle public methods --
+---------------------------
+
+---Create a new Handle
 ---
+---@param handle snowcap.layer.LayerHandle
+---
+---@return glacier.bar.Handle
+function Handle.new(handle)
+    local _handle = setmetatable({ handle = handle }, { __index = Handle })
+
+    return _handle
+end
+
+---Request keyboard focus for the `Bar`
+function Handle:focus()
+    self.handle:update({
+        keyboard_interactivity = Layer.keyboard_interactivity.EXCLUSIVE,
+    })
+end
+
+---Remove keyboard focus for the `Bar`
+function Handle:unfocus()
+    self.handle:update({
+        keyboard_interactivity = Layer.keyboard_interactivity.NONE,
+    })
+end
+
+---Sends an arbitrary Message
+---
+---@param msg any
+function Handle:send_message(msg)
+    self.handle.send_message(msg)
+end
+
+---Sets the keyboard event handler for this a `Bar`.
+---
+---@param on_event fun(handle: glacier.bar.Handle, event: snowcap.input.KeyEvent)
+function Handle:on_key_event(on_event)
+    self.handle:on_key_event(function(handle, event)
+        on_event(Handle.new(handle), event)
+    end)
+end
+
+-----------
+-- Other --
+-----------
+
+---Create a new `Bar`.
 ---@param config glacier.bar.Config
 function Bar:new(config)
     config = config or {}
-    config.style = config.style or {}
-    local restore_focus = nil
+    config.style = require("glacier.utils").merge_table(config.style or {}, _bar.default_style())
 
-    if config.output ~= nil then
-        restore_focus = Output.get_focused()
-        config.output:focus()
-    else
-        config.output = Output.get_focused()
-    end
+    local base = require("snowcap.widget.base").Base.new()
+    local bar = setmetatable(base, { __index = Bar, __tostring = Bar.__tostring }) --[[@as glacier.bar.Bar]]
 
-    ---@type glacier.bar.Config
-    local default_config = {
-        output = config.output,
-        style = {
-            dimension = 24,
-            bg_color = Widget.color.from_rgba(0.15, 0.03, 0.1, 0.65),
-            border = { thickness = 0 },
-            padding = {
-                top = 8,
-                right = 8,
-                bottom = 8,
-                left = 8,
-            },
-            spacing = 8,
-        },
-        first_view = bar.first_view or bar.default_first_view,
-        center_view = bar.center_view or bar.default_center_view,
-        last_view = bar.last_view or bar.default_last_view,
-    }
+    bar.style = config.style
 
-    config = require("glacier.utils").merge_table(default_config, config)
+    bar.first = config.first or {}
+    bar.center = config.center or {}
+    bar.last = config.last or {}
 
-    ---@type glacier.bar.Bar
-    ---@diagnostic disable-next-line
-    local bar = {
-        style = {
-            dimension = config.style.dimension,
-            bg_color = config.style.bg_color,
-            border = config.style.border,
-            padding = config.style.padding,
-            spacing = config.style.spacing,
-            first_spacing = config.style.first_spacing or config.style.spacing,
-            center_spacing = config.style.center_spacing or config.style.spacing,
-            last_spacing = config.style.last_spacing or config.style.spacing,
-        },
-        first_view = config.first_view,
-        center_view = config.center_view,
-        last_view = config.last_view,
-        first = {},
-        center = {},
-        last = {},
-    }
-
-    setmetatable(bar, self)
-    self.__index = self
-
-    bar.first = bar:process_children(config.first)
-    bar.center = bar:process_children(config.center)
-    bar.last = bar:process_children(config.last)
-
-    bar:show()
-
-    if restore_focus then
-        restore_focus:focus()
-    end
+    bar.first_view = config.first_view
+    bar.center_view = config.center_view
+    bar.last_view = config.last_view
 
     return bar
 end
 
----Get the bar's handle.
----@return snowcap.layer.LayerHandle
-function Bar:get_handle()
-    return self.handle
+function Bar:__tostring()
+    return ("<Bar#%d>"):format(self:id())
 end
 
-bar.Bar = Bar
+_bar.Bar = Bar
 
----@class glacier.bar.Config
----@field output pinnacle.output.OutputHandle? Handle to the output this bar is meant for.
----@field style? glacier.bar.Style The bar style.
----@field first_view? glacier.bar.ViewFn Function to call to render the first block.
----@field center_view? glacier.bar.ViewFn Function to call to render the central block.
----@field last_view? glacier.bar.ViewFn Function to call to render the last block.
----@field first? (glacier.widget.Base|glacier.bar.WidgetFn)[] A list of widgets to draw on the first area of the bar.
----@field center? (glacier.widget.Base|glacier.bar.WidgetFn)[] A list of widgets to draw in the middle of the bar.
----@field last? (glacier.widget.Base|glacier.bar.WidgetFn)[] A list of widgets to draw on the last area of the bar.
-
+---Create a new Bar.
 ---@param ... glacier.bar.Config
 ---@return glacier.bar.Bar
-function bar.mt:__call(...)
+function _bar.mt:__call(...)
     return Bar:new(...)
 end
 
----@diagnostic disable-next-line:param-type-mismatch
-return setmetatable(bar, bar.mt) --[[@as glacier.bar]]
+---@diagnostic disable-next-line: param-type-mismatch
+return setmetatable(_bar, _bar.mt) --[[@as glacier.bar]]
