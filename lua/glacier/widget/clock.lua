@@ -1,42 +1,57 @@
 local Widget = require("snowcap.widget")
-
-local Base = require("glacier.widget.base")
-local widget_signal = require("glacier.widget.signal")
 local timer = require("glacier.utils.timer")
 
----Function to call to render the clock widget
+---Clock's view function.
 ---@alias glacier.widget.clock.ViewFn fun(text: string, style: snowcap.widget.text.Style): snowcap.widget.WidgetDef
 
----glacier.widget.clock module.
+---glacier.widget.clock module
 ---
----@class glacier.widget.clock: glacier.widget.Base
----@field mt metatable This module metatable.
----@field view_fn glacier.widget.clock.ViewFn Global override for clocks rendering function.
+---@class glacier.widget.clock: snowcap.widget.Program
+---@field mt metatable The module metatable.
 ---
----@overload fun(...: glacier.widget.clock.Config): glacier.widget.clock.Clock
+---@overload fun(...: glacier.widget.clock.Config): glacier.widget.Clock
 local clock = { mt = {} }
+
+----------------------
+-- Type Definitions --
+----------------------
+
+---Configuration option for `glacier.widget.Clock`.
+---
+---@class glacier.widget.clock.Config
+---Format String to call os.date with.
+---
+---Defaults to "%a. %d %b. %H %M"
+---@field format? string
+---Time to wait between clock refresh (in seconds).
+---
+---Defaults to 30
+---@field period? number
+---@field style? snowcap.widget.text.Style Style to apply to the clock's text.
+---@field view_fn? glacier.widget.clock.ViewFn Render function.
 
 ---A simple date/time widget.
 ---
----The widget periodically calls `os.date()` with a user-defined format. The period can be changed
----if a shorter period is to be used.
+---The widget periodically calls `os.date()` with a user-defined format.
 ---
----@see glacier.widget.clock.Config for more information about the default config.
----
----@class glacier.widget.clock.Clock: glacier.widget.Base
----@field format string Format string to call os.date with.
----@field content string String representing the current time.
+---@class glacier.widget.Clock: snowcap.widget.Program, snowcap.widget.base.Base
+---@field format string Format string to call os.date with
 ---@field style snowcap.widget.text.Style Style to apply to the clock's widget.
----@field view_fn glacier.widget.clock.ViewFn Function to call to render the clock.
-local Clock = Base:new_class({ type = "Clock" })
+---@field view_fn? glacier.widget.clock.ViewFn Optional view override.
+---@field timer glacier.timer.Timer Refresh timer.
+local Clock = setmetatable({}, { __index = require("snowcap.widget.base").Base })
 
----Default view fn for clocks.
+----------------------
+-- Module functions --
+----------------------
+
+---Default view function for `Clock`.
 ---
----This function create a full-heigh container and vertically centers the text inside of it.
----@param content string Text to display.
----@param style snowcap.widget.text.Style Text style assigned to the `glacier.widget.clock.Clock`.
+---@param content string
+---@param style snowcap.widget.text.Style
+---@return snowcap.widget.WidgetDef
 function clock.default_view(content, style)
-    local widget = Widget.container({
+    return Widget.container({
         height = Widget.length.Fill,
         width = Widget.length.Shrink,
         valign = Widget.alignment.CENTER,
@@ -47,59 +62,81 @@ function clock.default_view(content, style)
             style = style,
         }),
     })
-
-    return widget
 end
 
----Create the view for this clock.
+---------------------------------
+-- impl snowcap.widget.Program --
+---------------------------------
+
+---Creates a widget definition for display by Snowcap.
 ---
----@return snowcap.widget.WidgetDef
+---A widget may return nil to notify its parent program that it has
+---nothing to display. It's up to the parent to decide whether to display a
+---placeholder or to remove the widget from the tree.
+---@return snowcap.widget.WidgetDef?
 function Clock:view()
-    return self.view_fn(self.content, self.style)
+    local view_fn = self.view_fn or clock.default_view
+    local content = tostring(os.date(self.format))
+
+    return view_fn(content, self.style)
 end
 
----Refresh the clock.
+---Updates this widget program with the received message.
+---@param _ any
+function Clock:update(_) end
+
+---Called when a surface has been created with this program.
 ---
-function Clock:refresh()
-    self.content = tostring(os.date(self.format))
-    self:emit(widget_signal.redraw_needed)
+---A surface handle is provided to allow the program to manupulate
+---the surface. This handle should be passed to any child programs
+---to allow them to use it as well.
+---
+---@param event snowcap.widget.SurfaceEvent
+function Clock:event(event)
+    if event.created then
+        self.timer:start(false)
+    end
 end
 
----Configuration options for `glacier.widget.clock.Clock`.
----
----@class glacier.widget.clock.Config
----@field format? string Format string to call os.date with. Default: "%a. %d %b. %H:%M"
----@field refresh? number Amount of time to wait before refreshing the clock (in second). Default: 30
----@field style? snowcap.widget.text.Style Style to apply to the clock's text.
----@field view_fn? glacier.widget.clock.ViewFn Function to call to render the widget.
+-----------
+-- Other --
+-----------
 
----Create a new Clock.
+---Creates a new Clock.
 ---@param config glacier.widget.clock.Config
----@return glacier.widget.clock.Clock
 function Clock:new(config)
-    config = config or {}
+    local format = "%a. %d %b. %H:%M"
 
-    local format = config.format or "%a. %d %b. %H:%M"
-
-    ---@diagnostic disable-next-line:redefined-local
-    local ret = Clock:super({
+    ---@type glacier.widget.clock.Config
+    config = require("glacier.utils").merge_table({
         format = format,
-        content = tostring(os.date(format)),
-        style = config.style,
-        view_fn = config.view_fn or clock.view_fn or clock.default_view,
-    })
+        period = 30,
+    }, config)
 
-    ret.timer = timer.started({
-        interval = config.refresh or 30,
-        callback = function()
-            ret:refresh()
+    local base = require("snowcap.widget.base").Base.new()
+    local ret = setmetatable(base, { __index = Clock })
+
+    ---@cast ret glacier.widget.Clock
+
+    ret.format = config.format
+    ret.style = config.style
+    ret.view_fn = config.view_fn
+
+    ret.timer = timer({
+        interval = config.period,
+        signaler = ret:signaler(),
+        on_timeout = function(_)
+            ret:emit(require("snowcap.widget.signal").redraw_needed)
         end,
     })
 
     return ret
 end
 
----Create a `Clock` widget.
+---Creates a new Clock.
+---
+---@param ... glacier.widget.clock.Config
+---@return glacier.widget.Clock
 function clock.mt:__call(...)
     return Clock:new(...)
 end
