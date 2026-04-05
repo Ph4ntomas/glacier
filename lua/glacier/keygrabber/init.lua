@@ -46,10 +46,11 @@ local keygrabber = { mt = {} }
 ---@field on_stop? glacier.keygrabber.StopCallback Called when the KeyGrabber stops grabbing inputs.
 ---@field ignore_capture? boolean If true, captured events will be forwarded to `on_key_press`/`on_key_release` callbacks.
 local KeyGrabber = {}
+setmetatable(KeyGrabber, { __index = require("snowcap.widget.base").Base })
 
 ---Returns a transparent WidgetDef
 ---
----@return snowcap.widget.WidgetDef
+---@return snowcap.widget.WidgetDef?
 function KeyGrabber:view()
     return Widget.row({
         height = Widget.length.Fixed(1.0),
@@ -192,7 +193,7 @@ end
 
 --- Relocate the keygrabber when output focus changes.
 ---
---- @private
+--- @package
 function KeyGrabber:relocate()
     Log.warn("relocating ... Running state: " .. tostring(self:running()))
     if self:running() then
@@ -235,6 +236,9 @@ function KeyGrabber:new(config)
     check_callback("on_start")
     check_callback("on_stop")
 
+    local base = require("snowcap.widget.base").Base.new()
+    local key_grabber = setmetatable(base, { __index = self })
+
     local grabber = {
         on_key_press = config.on_key_press,
         on_key_release = config.on_key_release,
@@ -245,17 +249,20 @@ function KeyGrabber:new(config)
         paused = false,
     }
 
-    setmetatable(grabber, self)
-    self.__index = self
+    for k, v in pairs(grabber) do
+        key_grabber[k] = v
+    end
+
+    ---@cast key_grabber glacier.keygrabber.KeyGrabber
 
     local Output = require("pinnacle.output")
     Output.connect_signal({
-        focused = function(o)
-            grabber:relocate()
+        focused = function(_)
+            key_grabber:relocate()
         end,
     })
 
-    return grabber
+    return key_grabber
 end
 
 function keygrabber.mt:__call(...)
