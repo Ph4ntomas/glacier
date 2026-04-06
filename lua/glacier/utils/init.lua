@@ -30,4 +30,44 @@ function utils.merge_table(left, right)
     return left
 end
 
+---Weak wrapper around some data.
+---@class glacier.utils.Weak<T>
+---@field data T
+local Weak = {}
+
+---Create a new Weak<T>
+---
+---@generic T
+---@param data T
+---@return glacier.utils.Weak<T>
+function Weak:new(data)
+    return setmetatable({ data = data }, { __index = Weak, __mode = "kv" })
+end
+
+---Retrieve the value
+---
+---@generic T
+---@return T?
+function Weak:get()
+    return self.data
+end
+
+---Check if the value is still alive
+---
+---@return boolean
+function Weak:is_alive()
+    return self.data ~= nil
+end
+
+---Wrap a reference in a `Weak`
+---
+---@generic T
+---@param data T
+---@return glacier.utils.Weak<T>
+function utils.weak(data)
+    return Weak:new(data)
+end
+
+utils.Weak = Weak
+
 return utils
