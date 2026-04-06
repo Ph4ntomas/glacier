@@ -632,6 +632,47 @@ function modal.init(config)
     end
 end
 
+---Access the module's signaler
+---
+---@return snowcap.signal.Signaler
+function modal.signaler()
+    return _modal.signaler
+end
+
+---@param config? glacier.widget.textbox.Config
+---@return glacier.widget.TextBox
+function modal.active_mode(config)
+    config = config or {}
+    config.content = _modal.active_mode:get()
+
+    local textbox = require("glacier.widget.textbox")
+
+    local tb = textbox(config)
+
+    tb:connect_with(_modal.signaler, _signal.MODE_CHANGED, function(handle, mode)
+        handle:set_content(mode)
+    end)
+
+    return tb
+end
+
+---@param config? glacier.widget.textbox.Config
+---@return glacier.widget.TextBox
+function modal.sequence(config)
+    config = config or {}
+    config.content = _modal.sequence:get()
+
+    local textbox = require("glacier.widget.textbox")
+
+    local tb = textbox(config)
+
+    tb:connect_with(_modal.signaler, _signal.SEQUENCE_CHANGED, function(handle, sequence)
+        handle:set_content(sequence)
+    end)
+
+    return tb
+end
+
 function modal.mt:__call(...)
     return modal.init(...)
 end
