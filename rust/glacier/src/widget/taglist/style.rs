@@ -61,9 +61,9 @@ pub fn brighten_background(amount: f32) -> impl Fn(TagStyle) -> TagStyle {
             alpha,
         }) = style.bg_color
         {
-            let red = (red * amount).clamp(1.0, 1.0);
-            let green = (green * amount).clamp(1.0, 1.0);
-            let blue = (blue * amount).clamp(1.0, 1.0);
+            let red = (red * amount).clamp(0.0, 1.0);
+            let green = (green * amount).clamp(0.0, 1.0);
+            let blue = (blue * amount).clamp(0.0, 1.0);
 
             Some(Color {
                 red,
