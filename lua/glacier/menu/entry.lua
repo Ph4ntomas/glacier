@@ -1,411 +1,411 @@
 local Widget = require("snowcap.widget")
 
-local color = require("glacier.misc.color")
-local action = require("glacier.menu.action")
+local icons = require("glacier.misc.icons")
 
---- Menu entry submodule
 ---@class glacier.menu.entry
-local _entry = {}
+local entry = {}
 
----@class glacier.menu.entry.SeparatorStyle
----@field fg_color? snowcap.widget.Color
----@field bg_color? snowcap.widget.Color
----@field height? snowcap.widget.Length
----@field padding? snowcap.widget.Padding
----@field thickness? number
+----------------------
+-- Type Definitions --
+----------------------
 
----@class glacier.menu.entry.MenuIndicatorStyle
----@field width? snowcap.widget.Length
----@field height? snowcap.widget.Length
----@field color? snowcap.widget.Color
+---@alias glacier.menu.entry.OpenMenuCallback fun(): glacier.menu.Menu
 
----@class glacier.menu.entry.EntryStyle
----@field fg_color? snowcap.widget.Color
----@field bg_color? snowcap.widget.Color
----@field height? snowcap.widget.Length
----@field padding? snowcap.widget.Padding
----@field border? snowcap.widget.Border
+---@alias glacier.menu.entry.SubmitCallback fun()
 
----Styling options for Menu's Entry.
----@class glacier.menu.entry.Style
----@field font_size? integer Size of the font, in pixel.
----@field font? snowcap.widget.Font
----@field default? glacier.menu.entry.EntryStyle
----@field active? glacier.menu.entry.EntryStyle
----@field disabled? glacier.menu.entry.EntryStyle
----@field menu_indicator? glacier.menu.entry.MenuIndicatorStyle
----@field separator? glacier.menu.entry.SeparatorStyle
+---@class glacier.menu.entry.Event
+---@field hover? {}
+---@field submit? {}
+---@field enable? string
+---@field disable? string
 
-function _entry.default_style()
-    ---@type glacier.menu.entry.Style
-    return {
-        active = {
-            bg_color = color.from_hex("#6B1ABC"),
-        },
-        disabled = {
-            fg_color = color.from_hex("#5b5b5b"),
-        },
-        default = {
-            fg_color = color.from_hex("#d7d7d7"),
-            padding = { left = 2, right = 2 },
-        },
-        separator = {
-            fg_color = color.from_hex("#131313"),
-            height = Widget.length.Fixed(1),
-            padding = { left = 8, right = 8, top = 3, bottom = 3 },
-            thickness = 1,
-        },
-        menu_indicator = {
-            width = Widget.length.Fixed(12),
-            height = Widget.length.Fixed(12),
-            color = color.from_hex("#7b7b7b"),
-        },
-    }
-end
+---@class glacier.menu.entry.Message
+---@field tag string
+---@field event glacier.menu.entry.Event
+local Message = {}
 
----@enum glacier.menu.entry.State
-_entry.state = {
-    ACTIVE = "active",
-    DISABLED = "disabled",
-    DEFAULT = "default",
-}
-
----@param entry glacier.menu.Entry
----@param active boolean
----@return glacier.menu.entry.State
-function _entry.get_state(entry, active)
-    if entry:disabled() then
-        return _entry.state.DISABLED
-    elseif active then
-        return _entry.state.ACTIVE
-    else
-        return _entry.state.DEFAULT
-    end
-end
-
-function _entry.entry_style_for_state(style, state)
-    local default = style.default
-    state = state or _entry.state.DEFAULT
-
-    if state == _entry.state.DEFAULT then
-        return default
-    elseif style[state] == nil then
-        return default
-    end
-
-    ---@type glacier.menu.entry.EntryStyle
-    return {
-        bg_color = style[state].bg_color or default.bg_color,
-        fg_color = style[state].fg_color or default.fg_color,
-        height = style[state].height or default.height,
-        padding = style[state].padding or default.padding,
-        norder = style[state].border or default.border,
-    }
-end
-
----@alias glacier.menu.entry.ViewFn fun(self: self, active: boolean, style: glacier.menu.entry.Style): snowcap.widget.WidgetDef?
----@alias glacier.menu.entry.UpdateFn fun(self: self, message: any, surface: glacier.Surface)
----@alias glacier.menu.entry.ActivateFn fun(self: self, hover: boolean): glacier.menu.Message?
----@alias glacier.menu.entry.DeactivateFn fun(self: self)
----@alias glacier.menu.entry.SubmitFn fun(self: self): glacier.menu.Message?
----@alias glacier.menu.entry.OpenMenuFn fun(self: self): glacier.menu.Menu
-
----Entry's shared interface
+---@class glacier.menu.entry.Config
+---@field id? string
+---@field disabled? boolean
+---@field close_on_submit? boolean
 ---
----@class glacier.menu.Entry
----@field activate? glacier.menu.entry.ActivateFn Called when the entry is selected.
----@field deactivate? glacier.menu.entry.DeactivateFn Called when the entry stop being selected.
----@field update? glacier.menu.entry.UpdateFn Called on update to forward message.
----@field submit? glacier.menu.entry.SubmitFn Called when the entry is being submitted.
----@field open_menu? glacier.menu.entry.OpenMenuFn Called when the entry should open its menu.
-local Entry = {}
+---@field package program? snowcap.widget.Program
+---@field package on_submit? glacier.menu.entry.SubmitCallback
+---@field package on_open_menu? glacier.menu.entry.OpenMenuCallback
+---@field package is_menu? boolean
 
----Get the entry key.
----@return string?
-function Entry:key() end
+---@class glacier.menu.entry.WithMenu: snowcap.widget.Program
+---@field open_menu fun(self: self): glacier.menu.Menu?
 
----Set the entry key.
----@param key string
-function Entry:set_key(key) end ---@diagnostic disable-line:unused-local
+---@class glacier.menu.Entry: snowcap.widget.Program
+---@field private _id? string
+---@field private _program? snowcap.widget.Program|glacier.menu.entry.WithMenu
+---@field private _is_menu boolean
+---@field private _disabled boolean
+---@field private _close_on_submit boolean
+---@field private _on_submit? glacier.menu.entry.SubmitCallback
+---@field private _on_open_menu? glacier.menu.entry.OpenMenuCallback
+local Entry = setmetatable({}, { __index = require("snowcap.widget.base").Base })
 
----Called when the entry gets selected
----@param hover boolean True if the entry is was selected via a mouse hovering.
----@return glacier.menu.Message?
-function Entry:activate(hover) end ---@diagnostic disable-line:unused-local
+----------------------
+-- Module functions --
+----------------------
 
----Called when the entry is no longer selected.
-function Entry:deactivate() end
-
----@return string
-function Entry:label() end ---@diagnostic disable-line:missing-return
-
----@return boolean
-function Entry:disabled() end ---@diagnostic disable-line:missing-return
-
----@param active boolean
----@param style glacier.menu.entry.Style
----@return snowcap.widget.WidgetDef?
-function Entry:view(active, style) end ---@diagnostic disable-line:unused-local
-
----@param self glacier.menu.Entry
----@param style glacier.menu.entry.Style
----@return snowcap.widget.WidgetDef
-function _entry.default_entry_view(self, active, style)
-    local state = _entry.get_state(self, active)
-    local entry_style = _entry.entry_style_for_state(style, state)
+---@param style glacier.menu.style.Separator
+function entry.separator_view(style)
+    local separator = Widget.container({
+        child = Widget.column({ children = {} }),
+        width = Widget.length.Fill,
+        height = Widget.length.Fixed(style.thickness),
+        style = {
+            background = style.bg_color and Widget.background.Color(style.bg_color) or nil,
+            border = {
+                color = style.fg_color,
+                width = style.thickness,
+            },
+        },
+    })
 
     return Widget.container({
-        child = Widget.text({
-            text = self:label(),
-            style = {
-                color = entry_style.fg_color,
-                font = style.font,
-                pixels = style.font_size,
-            },
-        }),
-        clip = true,
-        padding = entry_style.padding,
-        height = entry_style.height,
-        width = Widget.length.Fill,
-        style = {
-            background_color = entry_style.bg_color,
-            border = entry_style.border,
-        },
+        child = separator,
+        padding = style.padding,
     })
 end
 
----@param self glacier.menu.Entry
----@param style glacier.menu.entry.Style
----@return snowcap.widget.WidgetDef
-function _entry.default_menu_view(self, active, style)
-    local state = _entry.get_state(self, active)
-    local entry_style = _entry.entry_style_for_state(style, state)
+---@param style glacier.menu.style.MenuIndicator
+---@param disabled boolean
+---@param selected boolean
+function entry.menu_indicator_view(style, disabled, selected)
+    local fg_color = style.color
 
-    local label_widget = Widget.text({
-        text = self:label(),
-        width = Widget.length.Fill,
-        style = {
-            color = entry_style.fg_color,
-            font = style.font,
-            pixels = style.font_size,
-        },
-    })
+    if disabled and style.color_disabled then
+        fg_color = style.color_disabled
+    elseif selected and style.color_selected then
+        fg_color = style.color_selected
+    end
 
-    local _icons = require("glacier.misc.icons")
-    local menu_icon_handle = _icons.menu
-        .menu_indicator()
-        :to_image_handle(style.menu_indicator.color or entry_style.fg_color)
-    local menu_icon = Widget.Image({
-        handle = menu_icon_handle,
+    local icon_handle = icons.menu.menu_indicator():to_image_handle(fg_color)
+    local icon = Widget.Image({
+        width = style.width,
+        height = style.height,
         content_fit = Widget.image.content_fit.SCALE_DOWN,
-        height = style.menu_indicator.height,
-        width = style.menu_indicator.width,
+        handle = icon_handle,
     })
 
-    return Widget.container({
-        child = Widget.row({
-            children = {
-                label_widget,
-                menu_icon,
-            },
-            item_alignment = Widget.alignment.CENTER,
-        }),
-        clip = true,
-        padding = entry_style.padding,
-        height = entry_style.height,
-        width = Widget.length.Fill,
-        valign = Widget.alignment.CENTER,
-        style = {
-            background_color = entry_style.bg_color,
-            border = entry_style.border,
+    return icon
+end
+
+-----------------------
+-- Message functions --
+-----------------------
+
+---Message sent to entries when they start being hovered.
+---
+---@return glacier.menu.entry.Message
+function Message.hover()
+    ---@type glacier.menu.entry.Message
+    return {
+        tag = entry.MESSAGE_TAG,
+        event = {
+            hover = {},
         },
-    })
+    }
 end
 
-----------------------
--- Simple Entries   --
-----------------------
-
-----------------------
--- Base             --
-----------------------
-
----Common entry implementation.
----@class glacier.menu.entry.EntryBase: glacier.menu.Entry
----@field protected _key string?
----@field protected _label string
----@field protected _disabled boolean
-local EntryBase = {}
-EntryBase.__index = EntryBase
-EntryBase.__name = "glacier.menu.entry.EntryBase"
-
-function EntryBase:new_type()
-    return setmetatable({}, self)
+---Message sent to entries when they are submitted.
+---
+---@return glacier.menu.entry.Message
+function Message.submit()
+    ---@type glacier.menu.entry.Message
+    return {
+        tag = entry.MESSAGE_TAG,
+        event = {
+            submit = {},
+        },
+    }
 end
 
-function EntryBase:super(o)
-    o = o or {}
-
-    o = setmetatable(o, self)
-
-    return o
+---Message sent to entries to change their enable state.
+---
+---@param id string
+---@return glacier.menu.entry.Message
+function Message.enable(id)
+    ---@type glacier.menu.entry.Message
+    return {
+        tag = entry.MESSAGE_TAG,
+        event = {
+            enable = id,
+        },
+    }
 end
 
-function EntryBase:key()
-    return self._key
+---Message sent to entries to change their enable state.
+---
+---@param id string
+---@return glacier.menu.entry.Message
+function Message.disable(id)
+    ---@type glacier.menu.entry.Message
+    return {
+        tag = entry.MESSAGE_TAG,
+        event = {
+            disable = id,
+        },
+    }
 end
 
-function EntryBase:set_key(key)
-    self._key = key
+--------------------------
+-- Entry public methods --
+--------------------------
+
+---Check if this Entry is a menu.
+---
+---@return boolean
+function Entry:is_menu()
+    return self._program ~= nil and self._is_menu
 end
 
-function EntryBase:label()
-    return self._label
+---Check if this Entry is a standard entry.
+---
+function Entry:is_standard()
+    return self._program ~= nil and not self._is_menu
 end
 
-function EntryBase:disabled()
+---Check if this Entry is a separator.
+---
+function Entry:is_separator()
+    return self._program == nil
+end
+
+---Check whether the entry is disabled.
+---
+---@return boolean
+function Entry:is_disabled()
     return self._disabled
 end
 
----Render an entry using the default view.
----
----@param active boolean
----@param style glacier.menu.entry.Style
----@return snowcap.widget.WidgetDef
-function EntryBase:view(active, style)
-    return _entry.default_entry_view(self, active, style)
+function Entry:should_close_on_submit()
+    return self:is_standard() and self._close_on_submit
 end
 
-_entry.EntryBase = EntryBase
-
-----------------------
--- Entry            --
-----------------------
-
----@class glacier.menu.entry.SimpleEntry: glacier.menu.entry.EntryBase
----@field private _on_submit glacier.menu.entry.SubmitFn
-local SimpleEntry = EntryBase:new_type()
-SimpleEntry.__index = SimpleEntry
-SimpleEntry.__name = "glacier.menu.SimpleEntry"
-
-function SimpleEntry.new(label, on_submit)
-    local self = SimpleEntry:super({
-        _label = label,
-        _disabled = on_submit == nil,
-        _on_submit = on_submit,
-    })
-
-    return self
-end
-
-function SimpleEntry:submit()
-    local ret
-
-    if not self._disabled and self._on_submit then
-        ret = self._on_submit(self)
+function Entry:open_menu()
+    if not self._is_menu or self._disabled then
+        return nil
     end
 
-    return ret or action.menu.Close()
-end
-
-_entry.SimpleEntry = SimpleEntry
-
-function _entry.simple_entry(label, on_submit)
-    return SimpleEntry.new(label, on_submit)
-end
-
-----------------------
--- Menu             --
-----------------------
-
----@class glacier.menu.entry.SimpleMenu: glacier.menu.entry.EntryBase
----@field private _on_open_menu glacier.menu.entry.OpenMenuFn
-local SimpleMenu = EntryBase:new_type()
-SimpleMenu.__index = SimpleMenu
-SimpleMenu.__name = "glacier.menu.entry.SimpleMenu"
-
-function SimpleMenu.new(label, on_open_menu)
-    local self = SimpleMenu:super({
-        _label = label,
-        _disabled = on_open_menu == nil,
-        _on_open_menu = on_open_menu,
-    })
-
-    return self
-end
-
-function SimpleMenu:activate(hover)
-    if hover then
-        return action.entry.OpenMenu()
-    end
-end
-
-function SimpleMenu:submit()
-    if not self._disabled and self._on_open_menu then
-        return action.entry.OpenMenu()
-    end
-end
-
-function SimpleMenu:open_menu()
     if self._on_open_menu then
-        return self._on_open_menu(self)
+        return self._on_open_menu()
+    elseif type(self._program.open_menu) == "function" then
+        local child = self._program --[[@as glacier.menu.entry.WithMenu]]
+        return child:open_menu()
+    end
+
+    return nil
+end
+
+---------------------------
+-- Entry private methods --
+---------------------------
+
+------------------------------
+-- impl snowcap.widget.Base --
+------------------------------
+
+---Gets the widget's signaler
+---
+---@return snowcap.signal.Signaler
+function Entry:signaler()
+    if self._program then
+        return self._program:signaler()
+    else
+        error("Separator don't have a signaler.")
     end
 end
 
-function SimpleMenu:view(active, style)
-    return _entry.default_menu_view(self, active, style)
+---Connects a callback to a specific signal.
+---
+---@param name string The name of the signal you're connecting to.
+---@return snowcap.signal.SignalHandle
+function Entry:connect(name, callback)
+    if self._program then
+        return self._program:connect(name, callback)
+    else
+        error("Can't connect to separators")
+    end
 end
 
-_entry.SimpleMenu = SimpleMenu
-function _entry.simple_menu(label, on_open_menu)
-    return SimpleMenu.new(label, on_open_menu)
+---Emits a signal.
+---
+---@param name string Signal to emit
+---@param ... any Parameter to sent to the callbacks
+function Entry:emit(name, ...)
+    if self._program then
+        self._program:emit(name, ...)
+    end
 end
 
----@class glacier.menu.entry.Separator: glacier.menu.Entry
-local Separator = {}
-Separator.__index = Separator
-Separator.__name = "glacier.menu.entry.Separator"
-
-function Separator.new()
-    return setmetatable({}, Separator)
+---Disconnects a given callback.
+---
+---@param handle snowcap.signal.SignalHandle Handle to the callback to disconnect.
+function Entry:disconnect(handle)
+    if self._program then
+        self._program:disconnect(handle)
+    end
 end
 
-function Separator:key()
-    return "#glacier-entry-menu-separator"
+---Disconnects all signal handlers.
+function Entry:disconnect_all()
+    if self._program then
+        self._program:disconnect_all()
+    end
 end
 
-function Separator:set_key(_) end
+---------------------------------
+-- impl snowcap.widget.Program --
+---------------------------------
 
-function Separator:disabled()
-    return true
+---Creates a widget definition for display by Snowcap.
+---
+---A widget may return nil to notify its parent program that it has
+---nothing to display. It's up to the parent to decide whether to display a
+---placeholder or to remove the widget from the tree.
+---@return snowcap.widget.WidgetDef?
+function Entry:view()
+    if self._program then
+        return self._program:view()
+    end
 end
 
-function Separator:label()
-    return ""
+---Updates this widget program with the received message.
+---@param msg any|glacier.menu.entry.Message
+function Entry:update(msg)
+    local is_standard = self:is_standard()
+
+    if self._program then
+        if msg.tag ~= entry.MESSAGE_TAG then
+            self._program:update(msg)
+            return
+        end
+
+        ---@cast msg glacier.menu.entry.Message
+        if is_standard and msg.event.submit then
+            if self._on_submit then
+                self._on_submit()
+                return
+            else
+                self._program:update(msg)
+            end
+        elseif msg.event.hover then
+            self._program:update(msg)
+        elseif msg.event.enable and self._id == msg.event.enable then
+            self._disabled = false
+        elseif msg.event.disable and self._id == msg.event.disable then
+            self._disabled = true
+        end
+    end
 end
 
-function Separator:view(active, style)
-    _ = active
-    return Widget.container({
-        padding = style.separator.padding,
-        child = Widget.container({
-            child = Widget.column({ children = {} }),
-            width = Widget.length.Fill,
-            height = style.separator.height,
-            style = {
-                background_color = style.separator.bg_color,
-                border = {
-                    width = style.separator.thickness,
-                    color = style.separator.fg_color,
-                },
-            },
-        }),
-    })
+---Called when a surface has been created with this program.
+---
+---A surface handle is provided to allow the program to manupulate
+---the surface. This handle should be passed to any child programs
+---to allow them to use it as well.
+---
+---@param event snowcap.widget.SurfaceEvent
+function Entry:event(event)
+    if self._program then
+        return self._program:event(event)
+    end
 end
 
-_entry.Separator = Separator
-function _entry.separator()
-    return Separator.new()
+-----------
+-- Other --
+-----------
+
+---@package
+---@param config? glacier.menu.entry.Config
+---@return glacier.menu.Entry
+function Entry:new(config)
+    local base = require("snowcap.widget.base").Base.new()
+    local ret = setmetatable(base, { __index = Entry }) --[[@as glacier.menu.Entry]]
+
+    if config then
+        ret._program = config.program
+        ret._id = config.id
+        ret._is_menu = config.is_menu
+        ret._disabled = config.disabled
+
+        ret._close_on_submit = config.close_on_submit
+        ret._on_open_menu = config.on_open_menu
+        ret._on_submit = config.on_submit
+    else
+        ret._disabled = true
+        ret._close_on_submit = false
+    end
+
+    return ret
 end
 
-return _entry
+---@param child snowcap.widget.Program
+---@param config? glacier.menu.entry.Config|fun()
+---@param on_submit? fun()
+---@return glacier.menu.Entry
+function entry.standard(child, config, on_submit)
+    if type(config) == "function" then
+        on_submit = config
+        config = nil
+    end
+
+    config = config or {}
+
+    if config.disabled == nil then
+        config.disabled = false
+    end
+
+    if config.close_on_submit == nil then
+        config.close_on_submit = true
+    end
+
+    config.program = child
+    config.is_menu = false
+    config.on_submit = on_submit
+    config.on_open_menu = nil
+
+    return Entry:new(config)
+end
+
+---@param child snowcap.widget.Program|glacier.menu.entry.WithMenu
+---@param config? glacier.menu.entry.Config|fun(): glacier.menu.Menu
+---@param on_open_menu? fun(): glacier.menu.Menu
+---@return glacier.menu.Entry
+function entry.menu(child, config, on_open_menu)
+    if type(config) == "function" then
+        on_open_menu = config
+        config = nil
+    end
+
+    config = config or {}
+    config.disabled = config.disabled ~= nil and config.disabled or false
+    config.close_on_submit = false
+
+    config.program = child
+    config.is_menu = true
+    config.on_open_menu = on_open_menu
+    config.on_submit = nil
+
+    if not config.on_open_menu and not child.open_menu then
+        error("entry.menu requires a way to open the menu.")
+    end
+
+    return Entry:new(config)
+end
+
+---@return glacier.menu.Entry
+function entry.separator()
+    return Entry:new()
+end
+
+entry.MESSAGE_TAG = "glacier::menu::EntryTag"
+
+entry.Message = Message
+
+return entry
