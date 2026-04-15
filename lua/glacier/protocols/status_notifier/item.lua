@@ -5,13 +5,20 @@ local Types = require("glacier.dbus.type")
 
 local _config = require("glacier.protocols.status_notifier.config")
 
----@enum glacier.status_notifier.ItemProxy.scroll_orientation
+---@class glacier.protocols.status_notifier.item
+local item = {}
+
+----------------------
+-- Type definitions --
+----------------------
+
+---@enum glacier.protocols.status_notifier.ItemProxy.scroll_orientation
 local scroll_orientation = {
     horizontal = "horizontal",
     vertical = "vertical",
 }
 
----@enum glacier.status_notifier.ItemProxy.category
+---@enum glacier.protocols.status_notifier.ItemProxy.category
 local category = {
     ApplicationStatus = "ApplicationStatus",
     Communications = "Communications",
@@ -20,20 +27,33 @@ local category = {
     Unknown = "",
 }
 
----@enum glacier.status_notifier.ItemProxy.status
+---@enum glacier.protocols.status_notifier.ItemProxy.status
 local status = {
     Passive = "Passive",
     Active = "Active",
     NeedsAttention = "NeedsAttention",
 }
 
----@class glacier.status_notifier.PixMap
+---@class glacier.protocols.status_notifier.PixMap
 ---@field x integer
 ---@field y integer
 ---@field data string
 local PixMap = {}
 PixMap.__index = PixMap
-PixMap.__name = "glacier.status_notifier.PixMap"
+PixMap.__name = "g.p.status_notifier.PixMap"
+
+---@class glacier.protocols.status_notifier.ItemProxy
+---@field private _proxy glacier.dbus.Proxy
+local ItemProxy = {}
+ItemProxy.scroll_orientation = scroll_orientation
+ItemProxy.category = category
+ItemProxy.status = status
+ItemProxy.__index = ItemProxy
+ItemProxy.__name = "g.p.status_notifier.ItemProxy"
+
+-----------------
+-- PixMap Impl --
+-----------------
 
 ---@param map glacier.dbus.type.Struct
 function Pixmap_from_dbus(map)
@@ -50,33 +70,13 @@ function Pixmap_from_dbus(map)
     return setmetatable({ x = x, y = y, data = table.concat(data) }, PixMap)
 end
 
----@class glacier.status_notifier.ItemProxy
----@field private _proxy glacier.dbus.Proxy
-local ItemProxy = {}
-ItemProxy.scroll_orientation = scroll_orientation
-ItemProxy.category = category
-ItemProxy.status = status
-ItemProxy.__index = ItemProxy
-ItemProxy.__name = "glacier.status_notifier.ItemProxy"
+----------------
+-- Proxy Impl --
+----------------
 
----@param connection glacier.dbus.Connection
----@param service string
----@param path? string
----
----@return glacier.status_notifier.ItemProxy
-function ItemProxy.new(connection, service, path)
-    local proxy = Proxy.builder(connection)
-        :with_destination(service)
-        :with_path(path or _config.items.object)
-        :with_interface(_config.items.interface)
-        :build()
-
-    return setmetatable({ _proxy = proxy }, ItemProxy)
-end
-
-------------------
--- Methods      --
-------------------
+-------------
+-- Methods --
+-------------
 
 ---@param x integer
 ---@param y integer
@@ -115,7 +115,7 @@ function ItemProxy:secondary_activate(x, y)
 end
 
 ---@param delta integer
----@param orientation glacier.status_notifier.ItemProxy.scroll_orientation
+---@param orientation glacier.protocols.status_notifier.ItemProxy.scroll_orientation
 function ItemProxy:scroll(delta, orientation)
     self._proxy:call(
         "Scroll",
@@ -132,11 +132,11 @@ function ItemProxy:provide_xdg_activation_token(token)
     Log.error("provide_xdg_activation is unimplemented.")
 end
 
-------------------
--- Properties   --
-------------------
+----------------
+-- Properties --
+----------------
 
----@return glacier.status_notifier.ItemProxy.category
+---@return glacier.protocols.status_notifier.ItemProxy.category
 function ItemProxy:get_category()
     local value, err = self._proxy:get_property("Category")
 
@@ -175,7 +175,7 @@ function ItemProxy:get_title()
     return value:get()
 end
 
----@return glacier.status_notifier.ItemProxy.status
+---@return glacier.protocols.status_notifier.ItemProxy.status
 function ItemProxy:get_status()
     local value, err = self._proxy:get_property("Status")
 
@@ -244,7 +244,7 @@ function ItemProxy:get_icon_name()
     return value:get()
 end
 
----@return glacier.status_notifier.PixMap[]
+---@return glacier.protocols.status_notifier.PixMap[]
 function ItemProxy:get_icon_pixmap()
     local array, err = self._proxy:get_property("IconPixmap")
 
@@ -254,7 +254,7 @@ function ItemProxy:get_icon_pixmap()
     end
 
     ---@cast array glacier.dbus.type.Array
-    ---@type glacier.status_notifier.PixMap[]
+    ---@type glacier.protocols.status_notifier.PixMap[]
     local ret = {}
 
     for _, pm in ipairs(array:get()) do
@@ -278,7 +278,7 @@ function ItemProxy:get_overlay_icon_name()
     return value:get()
 end
 
----@return glacier.status_notifier.PixMap[]
+---@return glacier.protocols.status_notifier.PixMap[]
 function ItemProxy:get_overlay_icon_pixmap()
     local array, err = self._proxy:get_property("OverlayIconPixmap")
 
@@ -288,7 +288,7 @@ function ItemProxy:get_overlay_icon_pixmap()
     end
 
     ---@cast array glacier.dbus.type.Array
-    ---@type glacier.status_notifier.PixMap[]
+    ---@type glacier.protocols.status_notifier.PixMap[]
     local ret = {}
 
     for _, pm in ipairs(array:get()) do
@@ -312,7 +312,7 @@ function ItemProxy:get_attention_icon_name()
     return value:get()
 end
 
----@return glacier.status_notifier.PixMap[]
+---@return glacier.protocols.status_notifier.PixMap[]
 function ItemProxy:get_attention_icon_pixmap()
     local array, err = self._proxy:get_property("AttentionIconPixmap")
 
@@ -322,7 +322,7 @@ function ItemProxy:get_attention_icon_pixmap()
     end
 
     ---@cast array glacier.dbus.type.Array
-    ---@type glacier.status_notifier.PixMap[]
+    ---@type glacier.protocols.status_notifier.PixMap[]
     local ret = {}
 
     for _, pm in ipairs(array:get()) do
@@ -346,9 +346,9 @@ function ItemProxy:get_attention_movie_name()
     return value:get()
 end
 
-------------------
--- Signals      --
-------------------
+-------------
+-- Signals --
+-------------
 
 ---@param f fun()
 function ItemProxy:on_new_title(f)
@@ -399,4 +399,29 @@ function ItemProxy:on_new_status(f)
     end)
 end
 
-return ItemProxy
+--------------
+-- Lifetime --
+--------------
+
+---@param connection glacier.dbus.Connection
+---@param service string
+---@param path? string
+---
+---@return glacier.protocols.status_notifier.ItemProxy
+function ItemProxy.new(connection, service, path)
+    local proxy = Proxy.builder(connection)
+        :with_destination(service)
+        :with_path(path or _config.items.object)
+        :with_interface(_config.items.interface)
+        :build()
+
+    return setmetatable({ _proxy = proxy }, ItemProxy)
+end
+
+-----------
+-- Other --
+-----------
+
+item.Proxy = ItemProxy
+
+return item

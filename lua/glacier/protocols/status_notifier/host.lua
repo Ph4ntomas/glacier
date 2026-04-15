@@ -1,212 +1,217 @@
-local Log = require("snowcap.log")
-
 local Connection = require("glacier.dbus.connection")
-local Interface = require("glacier.dbus.object.interface")
-local WatcherProxy = require("glacier.protocols.status_notifier.watcher_proxy")
-local ItemProxy = require("glacier.protocols.status_notifier.item_proxy")
-local DBusMenuProxy = require("glacier.protocols.status_notifier.dbusmenu_proxy")
+
+local dbusmenu = require("glacier.protocols.status_notifier.dbusmenu")
+local DBusMenuProxy = dbusmenu.Proxy
+local ItemProxy = require("glacier.protocols.status_notifier.item").Proxy
+local Watcher = require("glacier.protocols.status_notifier.watcher")
 
 local _config = require("glacier.protocols.status_notifier.config")
 
-local function build_interface()
-    return assert(Interface.builder(_config.host.interface):build())
+---@class glacier.protocols.status_notifier.host
+local host = {}
+
+---------------------
+-- Type definition --
+---------------------
+
+---@enum glacier.protocols.status_notifier.host.ItemStatus
+local item_status = {
+    passive = "passive",
+    active = "active",
+    needs_attention = "needsattention",
+    unknown = "unknown",
+}
+
+---@class glacier.protocols.status_notifier.host.menu_signal.LayoutUpdated
+---@field revision integer
+---@field parent_node integer
+
+---@class glacier.protocols.status_notifier.host.menu_signal.PropertiesUpdated
+---@field updates table<integer, glacier.protocols.status_notifier.layout.Properties>
+---@field removal table<integer, string[]>
+
+---@class glacier.protocols.status_notifier.host.MenuSignal
+---@field layout_updated? glacier.protocols.status_notifier.host.menu_signal.LayoutUpdated
+---@field properties_updated? glacier.protocols.status_notifier.host.menu_signal.PropertiesUpdated
+
+---@class glacier.protocols.status_notifier.host.Menu
+---@field private _proxy glacier.protocols.status_notifier.DBusMenuProxy
+local Menu = {}
+
+---@class glacier.protocols.status_notifier.host.ItemSignal
+---@field new_title? {}
+---@field new_icon? {}
+---@field new_attention_icon? {}
+---@field new_overlay_icon? {}
+---@field new_tooltip? {}
+---@field new_menu? {}
+---@field new_status? glacier.protocols.status_notifier.host.ItemStatus
+
+---@class glacier.protocols.status_notifier.host.Item
+---@field private _bus_id string,
+---@field private _destination string
+---@field private _proxy glacier.protocols.status_notifier.ItemProxy
+local Item = {}
+
+---@class glacier.protocols.status_notifier.host.Event
+---@field registered? glacier.protocols.status_notifier.host.Item
+---@field unregistered? string
+---@field error? string
+
+---@class glacier.protocols.status_notifier.Host
+---@field private _connection glacier.dbus.Connection
+---@field private _watcher_proxy glacier.protocols.status_notifier.WatcherProxy
+---@field private _name string
+local Host = {}
+Host.__index = Host
+Host.__name = "g.p.status_notifier.Host"
+
+---------------
+-- Menu Impl --
+---------------
+
+-------------------
+-- Public Method --
+-------------------
+
+function Menu:proxy()
+    return self._proxy
 end
 
---TODO: Once proxy caching is implemented, this can be removed.
+---@param node_id integer
+function Menu:click(node_id)
+    self._proxy:event(node_id, dbusmenu.Event.clicked, 0, 0)
+end
 
----@class glacier.status_notifier.host.Item
----@field _item_proxy glacier.status_notifier.ItemProxy
----@field _dbus_menu_proxy? glacier.status_notifier.DBusMenuProxy
----@field id string
----@field title string
----@field status string
----@field icon_name string?
----@field icon_theme_path string?
----@field icon_pixmap glacier.status_notifier.PixMap[]?
----@field is_menu boolean
----@field menu_rev? integer
----@field menu_tree? glacier.status_notifier.LayoutNode
-local Item = {}
-Item.__index = Item
-Item.__name = "glacier.status_notifier.host.Item"
+---@param node_id integer
+function Menu:hover(node_id)
+    self._proxy:event(node_id, dbusmenu.Event.hovered, 0, 0)
+end
+
+---@param node_id integer
+function Menu:about_to_show(node_id)
+    self._proxy:about_to_show(node_id)
+end
+
+---@param node_id integer
+---@param depth integer
+---@param names? string[]
+---@return integer? revision
+---@return glacier.protocols.status_notifier.layout.Node? node
+function Menu:get_layout(node_id, depth, names)
+    return self._proxy:get_layout(node_id, depth, names or {})
+end
+
+---@param on_signal fun(signal: glacier.protocols.status_notifier.host.MenuSignal)
+function Menu:signal_stream(on_signal)
+    self._proxy:on_layout_updated(function(rev, parent)
+        on_signal({
+            layout_updated = {
+                parent_node = parent,
+                revision = rev,
+            },
+        })
+    end)
+
+    self._proxy:on_item_properties_updated(function(updated, removed)
+        on_signal({
+            properties_updated = {
+                updates = updated,
+                removal = removed,
+            },
+        })
+    end)
+end
+
+--------------
+-- Lifetime --
+--------------
 
 ---@param connection glacier.dbus.Connection
 ---@param destination string
 ---@param path string
----
----@return glacier.status_notifier.host.Item
-function Item_new(connection, destination, path)
-    local proxy = ItemProxy.new(connection, destination, path)
+---@return glacier.protocols.status_notifier.host.Menu?
+local function Menu_new(connection, destination, path)
+    local proxy = DBusMenuProxy.new(connection, destination, path)
 
-    local item = setmetatable({ _item_proxy = proxy }, Item)
-
-    item.id = proxy:get_id()
-    item.title = proxy:get_title()
-    item.status = proxy:get_status()
-    item.icon_name = proxy:get_icon_name()
-    item.icon_theme_path = proxy:get_icon_theme_path()
-    item.is_menu = proxy:is_menu()
-
-    local menu_path = proxy:get_menu()
-
-    if menu_path ~= "" then
-        item.is_menu = true
-
-        local menu, err = DBusMenuProxy.new(connection, destination, menu_path)
-        if not menu then
-            Log.warn(
-                ("Could not retrieve menu for %s at path %s: %s"):format(
-                    destination,
-                    menu_path,
-                    err
-                )
-            )
-        end
-
-        item._dbus_menu_proxy = menu
-        item._dbus_menu_proxy:on_layout_updated(function(_, _)
-            item:_refresh_layout()
-        end)
-
-        item:_refresh_layout()
-    elseif item.is_menu then
-        Log.warn(("%s:is_menu is set, but no menu could be retrieved."):format(destination))
-    end
-    item.icon_pixmap = proxy:get_icon_pixmap()
-
-    return item
-end
-
---TODO refresh per layout
-function Item:_refresh_layout()
-    local rev, tree = self._dbus_menu_proxy:get_layout()
-
-    self.menu_rev = rev
-    self.menu_tree = tree
-end
-
-function Item:hover(node_id)
-    self._dbus_menu_proxy:event(node_id, "hovered", 0, 0)
-end
-
-function Item:click(node_id)
-    self._dbus_menu_proxy:event(node_id, "clicked", 0, 0)
-end
-
---TODO refresh per layout
-function Item:about_to_show()
-    local node_id = 0
-
-    if self._dbus_menu_proxy then
-        if self._dbus_menu_proxy:about_to_show(node_id) then
-            self:_refresh_layout()
-        end
-    end
-end
-
----@class glacier.status_notifier.WeakHost
----@field private _host glacier.status_notifier.Host
-local WeakHost = {}
-WeakHost.__index = WeakHost
-WeakHost.__name = "glacier.status_notifier.WeakHost"
-
----@param host glacier.status_notifier.Host
----
----@return glacier.status_notifier.WeakHost
-function WeakHost.new(host)
-    return setmetatable({ _host = host }, WeakHost)
-end
-
----@return glacier.status_notifier.Host?
-function WeakHost:upgrade()
-    return self._host
-end
-
----@class glacier.status_notifier.Host
----@field _connection glacier.dbus.Connection
----@field _watcher_proxy glacier.status_notifier.WatcherProxy
----@field _items table<string, glacier.status_notifier.host.Item>
----@field _name string
----@field _path string
-local Host = {}
-Host.__index = Host
-Host.__name = "glacier.status_notifier.Host"
-
-function Host.new(connection, id, hooks)
-    local watcher_proxy = WatcherProxy.new(connection)
-    local name = ("%s-%s"):format(_config.host.service_prefix, id)
-    local path = ("%s/$s"):format(_config.host.object_prefix, id)
-    local iface = build_interface()
-
-    local interface = connection:router():get_interface(path, _config.host.interface)
-    if interface then
-        error("Interface is already registered")
+    if not proxy then
+        return nil
     end
 
-    connection:router():interface_at(path, iface)
-    local reply = connection:request_name(name)
-    if
-        reply == Connection.RequestNameReply.already_owner
-        or reply == Connection.RequestNameReply.exists
-    then
-        error("Name already taken")
+    return setmetatable({
+        _proxy = proxy,
+    }, { __index = Menu })
+end
+
+---------------
+-- Item Impl --
+---------------
+
+-------------------
+-- Public Method --
+-------------------
+
+function Item:bus_id()
+    return self._bus_id
+end
+
+function Item:proxy()
+    return self._proxy
+end
+
+---@param connection glacier.dbus.Connection
+---@return glacier.protocols.status_notifier.host.Menu?
+function Item:menu(connection)
+    local menu_path = self._proxy:get_menu()
+
+    if #menu_path == 0 then
+        return nil
     end
 
-    local host = setmetatable({
-        _connection = connection,
-        _watcher_proxy = watcher_proxy,
-        _items = {},
-        _name = name,
-        _path = path,
-    }, Host)
+    return Menu_new(connection, self._destination, menu_path)
+end
 
-    watcher_proxy:register_host(name)
-
-    local weak = WeakHost.new(host)
-    watcher_proxy:on_item_registered(function(service)
-        local h = weak:upgrade()
-        if h then
-            h:_on_item_registered(service)
-            if hooks.on_register then
-                hooks.on_register()
-            end
-        end
+---@param on_signal fun(signal: glacier.protocols.status_notifier.host.ItemSignal)
+function Item:signal_stream(on_signal)
+    self._proxy:on_new_title(function()
+        on_signal({ new_title = {} })
     end)
 
-    watcher_proxy:on_item_unregistered(function(service)
-        local h = weak:upgrade()
-        if h then
-            h:_on_item_unregistered(service)
-
-            if hooks.on_unregister then
-                hooks.on_unregister()
-            end
-        end
+    self._proxy:on_new_icon(function()
+        on_signal({ new_icon = {} })
     end)
 
-    host:_initialize_item()
+    self._proxy:on_new_attention_icon(function()
+        on_signal({ new_attention_icon = {} })
+    end)
 
-    return host
+    self._proxy:on_new_overlay_icon(function()
+        on_signal({ new_overlay_icon = {} })
+    end)
+
+    self._proxy:on_new_tooltip(function()
+        on_signal({ new_tooltip = {} })
+    end)
+
+    self._proxy:on_new_menu(function()
+        on_signal({ new_menu = {} })
+    end)
+
+    self._proxy:on_new_status(function(status)
+        on_signal({ new_status = status })
+    end)
 end
 
-function Host:__gc()
-    if self._connection and self._name then
-        self._connection:release_name(self._name)
-    end
-end
+--------------
+-- Lifetime --
+--------------
 
-function Host:_initialize_item()
-    local items = self._watcher_proxy:get_registered_items()
-
-    for _, name in ipairs(items) do
-        self:_on_item_registered(name)
-    end
-end
-
----@param item string
-function Host:_on_item_registered(item)
+---@param connection glacier.dbus.Connection
+---@param name string
+---@return glacier.protocols.status_notifier.host.Item
+local function Item_new(connection, name)
     local destination
-    local path = string.gsub(item, "^:[^/]+", function(m)
+    local path = string.gsub(name, "^:[^/]+", function(m)
         destination = m
         return ""
     end)
@@ -220,15 +225,98 @@ function Host:_on_item_registered(item)
         path = _config.items.object
     end
 
-    self._items[item] = Item_new(self._connection, destination, path)
+    local proxy = ItemProxy.new(connection, destination, path)
+
+    ---@type glacier.protocols.status_notifier.host.Item
+    local item = setmetatable({
+        _bus_id = name,
+        _destination = destination,
+        _proxy = proxy,
+    }, { __index = Item })
+
+    return item
 end
 
-function Host:_on_item_unregistered(item)
-    self._items[item] = nil
+---------------
+-- Host Impl --
+---------------
+
+-------------------
+-- Public Method --
+-------------------
+
+---@param connection glacier.dbus.Connection
+---@param name string
+---
+---@return glacier.protocols.status_notifier.host.Event
+local function _build_item(connection, name)
+    local item = Item_new(connection, name)
+    if not item then
+        return {
+            error = ("Failed to build item '%s'"):format(name),
+        }
+    else
+        return {
+            registered = item,
+        }
+    end
 end
 
-function Host:items()
-    return self._items
+---@param on_event fun(event: glacier.protocols.status_notifier.host.Event)
+function Host:item_stream(on_event)
+    local connection = self._connection
+    self._watcher_proxy:on_item_registered(function(service)
+        on_event(_build_item(connection, service))
+    end)
+
+    self._watcher_proxy:on_item_unregistered(function(service)
+        on_event({
+            unregistered = service,
+        })
+    end)
+
+    local items = self._watcher_proxy:get_registered_items()
+    for _, service in ipairs(items) do
+        on_event(_build_item(connection, service))
+    end
 end
 
-return Host
+--------------
+-- Lifetime --
+--------------
+
+--local function _build_interface()
+--return assert(Interface.builder(_config.host.interface):build())
+--end
+
+---@param connection glacier.dbus.Connection
+---@param id string
+---
+---@return glacier.protocols.status_notifier.Host
+function Host.new(connection, id)
+    local watcher = Watcher.Proxy.new(connection)
+    local name = ("%s-%s"):format(_config.host.service_prefix, id)
+
+    local reply = connection:request_name(name)
+    if
+        reply == Connection.RequestNameReply.already_owner
+        or reply == Connection.RequestNameReply.exists
+    then
+        error("Name already taken")
+    end
+
+    local ret = setmetatable({
+        _connection = connection,
+        _watcher_proxy = watcher,
+        _name = name,
+    }, Host)
+
+    watcher:register_host(name)
+
+    return ret
+end
+
+host.item_status = item_status
+host.Host = Host
+
+return host

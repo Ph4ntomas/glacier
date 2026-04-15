@@ -5,20 +5,27 @@ local Types = require("glacier.dbus.type")
 
 local _config = require("glacier.protocols.status_notifier.config")
 
----@enum glacier.status_notifier.DBusMenuProxy.status
-local status = {
-    normal = "normal",
-    notice = "notice",
-    unknown = "",
-}
+---@class glacier.protocols.status_notifier.dbusmenu
+local dbusmenu = {}
 
----@enum glacier.status_notifier.LayoutNode.event
+----------------------
+-- Type definitions --
+----------------------
+
+---@enum glacier.protocols.status_notifier.dbusmenu.Event
 local event = {
     clicked = "clicked",
     hovered = "hovered",
 }
 
----@class glacier.status_notifier.LayoutNode.Properties
+---@alias glacier.protocols.status_notifier.ItemsPropertiesUpdatedHandler
+---| fun(updated: table<integer, glacier.protocols.status_notifier.layout.Properties>, removed: table<integer, string[]>)
+
+---@alias glacier.protocols.status_notifier.LayoutUpdateHandler fun(revision:integer, parent_id:integer)
+
+---@alias glacier.protocols.status_notifier.ItemActivationRequestHandler fun(id:integer, timestamp: integer)
+
+---@class glacier.protocols.status_notifier.layout.Properties
 ---@field type string Either "standard", "separator", or x-<vendor>-<custom type>.
 ---@field label string Text of the Item.
 ---@field enabled boolean Whether the item can be activated or not.
@@ -29,6 +36,30 @@ local event = {
 ---@field toggle-type string One of: "checkmark", "radio", or an empty string if the item cannot be toggled.
 ---@field toggle-state integer Current state of a togglable item.
 ---@field children-display string If the item has children, the property is set to "submenu"
+
+---@class glacier.protocols.status_notifier.layout.Node
+---@field private _id integer
+---@field private _props glacier.protocols.status_notifier.layout.Properties
+---@field private _children glacier.protocols.status_notifier.layout.Node[]
+local Node = {}
+Node.__index = Node
+Node.__name = "g.p.status_notifier.layout.Node"
+
+local status = {
+    normal = "normal",
+    notice = "notice",
+    unknown = "",
+}
+
+---@class glacier.protocols.status_notifier.DBusMenuProxy
+---@field private _proxy glacier.dbus.Proxy
+local DBusMenuProxy = {}
+DBusMenuProxy.__index = DBusMenuProxy
+DBusMenuProxy.__name = "g.p.status_notifier.DBusMenuProxy"
+
+---------------------
+-- Properties Impl --
+---------------------
 
 local function Properties_from_dict(dict)
     local props = {}
@@ -47,22 +78,73 @@ local function Properties_from_dict(dict)
     return props
 end
 
----@class glacier.status_notifier.LayoutNode
----@field _id integer
----@field _props glacier.status_notifier.LayoutNode.Properties
----@field _children glacier.status_notifier.LayoutNode[]
-local LayoutNode = {}
-LayoutNode.status = status
-LayoutNode.event = event
-LayoutNode.__index = LayoutNode
-LayoutNode.__name = "glacier.status_notifier.LayoutNode"
+---------------
+-- Node Impl --
+---------------
+
+--------------------
+-- Public methods --
+--------------------
+
+function Node:id()
+    return self._id
+end
+
+function Node:label()
+    return self._props.label
+end
+
+function Node:is_submenu()
+    return self._props["children-display"] == "submenu"
+end
+
+function Node:is_separator()
+    return self._props.type == "separator"
+end
+
+function Node:is_standard()
+    return self._props.type == "standard"
+end
+
+function Node:is_radio()
+    return self._props["toggle-type"] == "radio"
+end
+
+function Node:is_checkbox()
+    return self._props["toggle-type"] == "checkmark"
+end
+
+function Node:is_toggled()
+    return self._props["toggle-state"] == 1
+end
+
+function Node:is_enabled()
+    return self._props.enabled
+end
+
+function Node:is_visible()
+    return self._props.visible
+end
+
+---@return glacier.protocols.status_notifier.layout.Properties
+function Node:properties()
+    return require("snowcap.util").deep_copy(self._props)
+end
+
+function Node:children()
+    return self._children or {}
+end
+
+--------------
+-- Lifetime --
+--------------
 
 ---@param id integer
----@param properties glacier.status_notifier.LayoutNode.Properties
----@param children? glacier.status_notifier.LayoutNode[]
+---@param properties glacier.protocols.status_notifier.layout.Properties
+---@param children? glacier.protocols.status_notifier.layout.Node[]
 ---
----@return glacier.status_notifier.LayoutNode
-local function LayoutNode_new(id, properties, children)
+---@return glacier.protocols.status_notifier.layout.Node
+local function Node_new(id, properties, children)
     local default_props = {
         ["type"] = "standard",
         ["label"] = "",
@@ -84,11 +166,11 @@ local function LayoutNode_new(id, properties, children)
         _id = id,
         _props = properties,
         _children = children,
-    }, LayoutNode)
+    }, Node)
 end
 
 ---@param layout glacier.dbus.type.Struct
-local function LayoutNode_from_struct(layout)
+local function Node_from_struct(layout)
     local dbus_id = layout[1] --[[@as glacier.dbus.type.Int32]]
     local dbus_props = layout[2] --[[@as glacier.dbus.type.Dict]]
     local dbus_children = layout[3] --[[@as glacier.dbus.type.Array]]
@@ -99,77 +181,16 @@ local function LayoutNode_from_struct(layout)
     local children = {}
     for _, child in ipairs(dbus_children:get()) do
         ---@cast child glacier.dbus.type.Variant
-        local child_layout = LayoutNode_from_struct(child:get() --[[@as glacier.dbus.type.Struct]])
+        local child_layout = Node_from_struct(child:get() --[[@as glacier.dbus.type.Struct]])
         table.insert(children, child_layout)
     end
 
-    return LayoutNode_new(id, props, children)
+    return Node_new(id, props, children)
 end
 
-function LayoutNode:id()
-    return self._id
-end
-
-function LayoutNode:label()
-    return self._props.label
-end
-
-function LayoutNode:is_submenu()
-    return self._props["children-display"] == "submenu"
-end
-
-function LayoutNode:is_separator()
-    return self._props.type == "separator"
-end
-
-function LayoutNode:is_standard()
-    return self._props.type == "standard"
-end
-
-function LayoutNode:is_radio()
-    return self._props["toggle-type"] == "radio"
-end
-
-function LayoutNode:is_checkbox()
-    return self._props["toggle-type"] == "checkmark"
-end
-
-function LayoutNode:is_toggled()
-    return self._props["toggle-state"] == 1
-end
-
-function LayoutNode:is_enabled()
-    return self._props.enabled
-end
-
-function LayoutNode:is_visible()
-    return self._props.visible
-end
-
-function LayoutNode:children()
-    return self._children or {}
-end
-
----@class glacier.status_notifier.DBusMenuProxy
----@field private _proxy glacier.dbus.Proxy
-local DBusMenuProxy = {}
-DBusMenuProxy.status = status
-DBusMenuProxy.__index = DBusMenuProxy
-DBusMenuProxy.__name = "glacier.status_notifier.DBusMenuProxy"
-
-function DBusMenuProxy.new(connection, service, path)
-    local proxy, err = Proxy.builder(connection)
-        :with_destination(service)
-        :with_path(path)
-        :with_interface(_config.dbusmenu.interface)
-        :build()
-
-    if not proxy then
-        return nil, err
-    end
-
-    return setmetatable({ _proxy = proxy }, DBusMenuProxy)
-end
+------------------------
+-- DBusMenuProxy Impl --
+------------------------
 
 ------------------
 -- Methods      --
@@ -180,7 +201,7 @@ end
 ---@param properties string[]? List of properties to retrieve.
 ---
 ---@return integer? revision
----@return glacier.status_notifier.LayoutNode?
+---@return glacier.protocols.status_notifier.layout.Node?
 function DBusMenuProxy:get_layout(parent_id, max_depth, properties)
     parent_id = parent_id or 0
     max_depth = max_depth or -1
@@ -213,7 +234,7 @@ function DBusMenuProxy:get_layout(parent_id, max_depth, properties)
     local dbus_revision = body[1] --[[@as glacier.dbus.type.UInt32]]
     local dbus_layout = body[2] --[[@as glacier.dbus.type.Struct]]
 
-    local layout = LayoutNode_from_struct(dbus_layout)
+    local layout = Node_from_struct(dbus_layout)
 
     return dbus_revision:get(), layout
 end
@@ -221,7 +242,7 @@ end
 ---@param ids integer[]? Ids of the node to retrieve. If nil or empty, fetch from all items.
 ---@param properties string[]? List of properties to retrieve.
 ---
----@return { id:integer, props: glacier.status_notifier.LayoutNode.Properties }[]?
+---@return { id:integer, props: glacier.protocols.status_notifier.layout.Properties }[]?
 function DBusMenuProxy:get_group_properties(ids, properties)
     ids = ids or {}
     properties = properties or {}
@@ -247,7 +268,7 @@ function DBusMenuProxy:get_property(node_id, property_name)
 end
 
 ---@param node_id integer
----@param evt glacier.status_notifier.LayoutNode.event
+---@param evt glacier.protocols.status_notifier.dbusmenu.Event
 ---@param _data any
 ---@param timestamp integer
 function DBusMenuProxy:event(node_id, evt, _data, timestamp)
@@ -308,7 +329,7 @@ function DBusMenuProxy:get_version()
     return value:get()
 end
 
----@return glacier.status_notifier.DBusMenuProxy.status
+---@return string
 function DBusMenuProxy:get_status()
     local value, err = self._proxy:get_property("Status")
 
@@ -325,10 +346,7 @@ end
 -- Signals      --
 ------------------
 
----@alias glacier.status_notifier.ItemsPropertiesUpdatedHandler
----| fun(updated: table<integer, glacier.status_notifier.LayoutNode.Properties>, removed: table<integer, string[]>)
-
----@param f glacier.status_notifier.ItemsPropertiesUpdatedHandler
+---@param f glacier.protocols.status_notifier.ItemsPropertiesUpdatedHandler
 function DBusMenuProxy:on_item_properties_updated(f)
     self._proxy:on_signal("ItemsPropertiesUpdated", function(_, _, body)
         local raw_updated = body[1] --[[@as glacier.dbus.type.Array]]
@@ -363,9 +381,7 @@ function DBusMenuProxy:on_item_properties_updated(f)
     end)
 end
 
----@alias glacier.status_notifier.LayoutUpdateHandler fun(revision:integer, parent_id:integer)
-
----@param f glacier.status_notifier.LayoutUpdateHandler
+---@param f glacier.protocols.status_notifier.LayoutUpdateHandler
 function DBusMenuProxy:on_layout_updated(f)
     self._proxy:on_signal("LayoutUpdated", function(_, _, body)
         local rev = body[1] --[[@as glacier.dbus.type.UInt32]]
@@ -375,9 +391,7 @@ function DBusMenuProxy:on_layout_updated(f)
     end)
 end
 
----@alias glacier.status_notifier.ItemActivationRequestHandler fun(id:integer, timestamp: integer)
-
----@param f glacier.status_notifier.ItemActivationRequestHandler
+---@param f glacier.protocols.status_notifier.ItemActivationRequestHandler
 function DBusMenuProxy:on_item_activation_requested(f)
     self._proxy:on_signal("ItemActivationRequested", function(_, _, body)
         local id = body[1] --[[@as glacier.dbus.type.Int32]]
@@ -387,4 +401,36 @@ function DBusMenuProxy:on_item_activation_requested(f)
     end)
 end
 
-return DBusMenuProxy
+--------------
+-- Lifetime --
+--------------
+
+---comment
+---@param connection glacier.dbus.Connection
+---@param service any
+---@param path any
+---
+---@return glacier.protocols.status_notifier.DBusMenuProxy?
+---@return string?
+function DBusMenuProxy.new(connection, service, path)
+    local proxy, err = Proxy.builder(connection)
+        :with_destination(service)
+        :with_path(path)
+        :with_interface(_config.dbusmenu.interface)
+        :build()
+
+    if not proxy then
+        return nil, err
+    end
+
+    return setmetatable({ _proxy = proxy }, DBusMenuProxy), nil
+end
+
+-----------
+-- Other --
+-----------
+
+dbusmenu.Proxy = DBusMenuProxy
+dbusmenu.Event = event
+
+return dbusmenu
