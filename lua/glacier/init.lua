@@ -12,7 +12,6 @@ local glacier = {
     keygrabber = require("glacier.keygrabber"),
     modal = require("glacier.modal"),
     separators = require("glacier.misc.separators"),
-    signal = require("glacier.signal"),
     timer = require("glacier.utils.timer"),
     utils = require("glacier.utils"),
     widget = require("glacier.widget"),
