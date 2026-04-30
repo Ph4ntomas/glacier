@@ -8,6 +8,10 @@ local utils = {
 ---Merge two table recursively
 ---
 ---WARNING: No effort were done to support cycle.
+---@generic T
+---@param left T
+---@param right T
+---@return T
 function utils.merge_table(left, right)
     if left == nil then
         return right
