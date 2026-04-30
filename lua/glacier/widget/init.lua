@@ -6,4 +6,5 @@ return {
     taglist = require("glacier.widget.taglist"),
     clock = require("glacier.widget.clock"),
     textbox = require("glacier.widget.textbox"),
+    systray = require("glacier.widget.systray"),
 }
