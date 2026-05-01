@@ -1,12 +1,15 @@
-use crate::{color, menu, misc::icons, services::status_notifier as sni};
+use crate::{
+    BlockOnTokio, color,
+    menu::{self, entry::WithMenu},
+    misc::icons,
+    services::status_notifier as sni,
+};
 
 use menu::message::Message;
 use snowcap_api::{
     signal::Signaler,
     widget::{self, Program, image, row, text},
 };
-
-pub use menu::message::InFlightMenu;
 
 pub type Menu = menu::Menu<Message>;
 pub type Handle = menu::Handle<Message>;
@@ -206,29 +209,34 @@ impl Program for SubMenu {
     fn update(&mut self, msg: Self::Message) {
         use menu::entry::Message as EMessage;
 
-        match msg {
-            Message::Entry(EMessage::Hover) => {
-                self.common.hover();
-            }
-            Message::Entry(EMessage::OpenMenu) => {
-                let service = &self.common.service;
-                let item_id = &self.common.item_id;
-                let node_id = self.common.node_id;
-
-                service.open_menu(item_id, node_id, {
-                    let signaler = self.signaler.clone();
-                    let config = self.config.clone();
-                    let service = service.clone();
-                    let item_id = item_id.to_owned();
-
-                    move |iter| {
-                        let menu = make_menu(iter, service, &item_id, &config);
-
-                        signaler.emit(menu::signal::RequestSubmenuOpen::new(menu));
-                    }
-                });
-            }
-            _ => {}
+        if let Message::Entry(EMessage::Hover) = msg {
+            self.common.hover()
         }
+    }
+}
+
+impl WithMenu for SubMenu {
+    fn open_menu(&self) -> Option<menu::Menu<Self::Message>> {
+        let service = &self.common.service;
+        let item_id = &self.common.item_id;
+        let node_id = self.common.node_id;
+
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        service.open_menu(item_id, node_id, {
+            let config = self.config.clone();
+            let service = service.clone();
+            let item_id = item_id.to_owned();
+
+            move |iter| {
+                let menu = make_menu(iter, service, &item_id, &config);
+
+                if tx.send(menu).is_err() {
+                    tracing::error!("Failed to send menu");
+                }
+            }
+        });
+
+        rx.block_on_tokio().ok()
     }
 }

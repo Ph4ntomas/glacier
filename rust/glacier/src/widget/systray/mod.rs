@@ -46,7 +46,11 @@ enum Event {
     ItemUpdated(item::UniqueId, item::Update),
     ItemRemoved(item::UniqueId),
 
-    MenuOpened(item::UniqueId, menu::InFlightMenu),
+    //MenuOpened(item::UniqueId, menu::InFlightMenu),
+    MenuReady(
+        item::UniqueId,
+        Vec<(i32, status_notifier::menu::Properties)>,
+    ),
     MenuClosed(item::UniqueId),
 }
 
@@ -435,17 +439,16 @@ where
 
     fn toggle_menu_impl(&self, item: &Item) {
         self.service.open_menu(&item.unique_id, 0, {
-            let service = self.service.clone();
             let item_id = item.unique_id.clone();
-            let config = self.menu_config.clone();
             let builder = self.builder;
             let signaler = self.base.signaler();
 
             move |iter| {
-                let menu = menu::make_menu(iter, service, &item_id, &config);
+                let menu_template: Vec<_> =
+                    iter.map(|(id, props)| (id, props.to_owned())).collect();
 
                 signaler.emit(snowcap_api::widget::signal::Message::<Msg>(
-                    builder.menu_opened(item_id, menu).into(),
+                    builder.menu_ready(item_id, menu_template).into(),
                 ));
             }
         });
@@ -514,10 +517,15 @@ where
             Event::ItemUpdated(id, update) => self.update_item(id, update),
             Event::ItemRemoved(item_id) => self.items.retain(|i| i.unique_id != item_id),
 
-            Event::MenuOpened(item_id, menu) => {
-                if let Some(menu) = menu.take() {
-                    self.open_menu(item_id, menu);
-                }
+            Event::MenuReady(item_id, template) => {
+                let menu = menu::make_menu(
+                    &mut template.iter().map(|(id, prop)| (*id, prop)),
+                    self.service.clone(),
+                    &item_id,
+                    &self.menu_config,
+                );
+
+                self.open_menu(item_id, menu);
             }
             Event::MenuClosed(item_id) => {
                 self.open_menu.take_if(|m| m.item_id == item_id);
@@ -559,8 +567,12 @@ impl MessageBuilder<Event> {
         self.build(Event::ItemRemoved(item_id))
     }
 
-    fn menu_opened(&self, item_id: item::UniqueId, menu: menu::Menu) -> UniversalMsg {
-        self.build(Event::MenuOpened(item_id, menu::InFlightMenu::new(menu)))
+    fn menu_ready(
+        &self,
+        item_id: item::UniqueId,
+        menu_template: Vec<(i32, status_notifier::menu::Properties)>,
+    ) -> UniversalMsg {
+        self.build(Event::MenuReady(item_id, menu_template))
     }
 
     fn menu_closed(&self, item_id: item::UniqueId) -> UniversalMsg {

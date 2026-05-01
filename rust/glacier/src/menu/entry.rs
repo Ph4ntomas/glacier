@@ -1,3 +1,4 @@
+//! Menu's entries.
 use snowcap_api::{
     signal::Signaler,
     surface::SurfaceEvent,
@@ -11,37 +12,20 @@ use snowcap_api::{
 };
 
 use crate::misc::icons;
+use crate::widget::utils::{View, view};
 
 #[derive(Clone, Debug)]
 pub enum Message {
     Hover,
-    OpenMenu,
     Submit,
     Enable(String),
     Disable(String),
 }
 
 type Child<Msg> = Box<dyn Program<Message = Msg> + Send>;
+type MenuChild<Msg> = Box<dyn WithMenu<Message = Msg> + Send>;
 
-pub struct View<Msg>(Box<dyn Fn() -> WidgetDef<Msg> + Send>);
-
-pub fn view<F, Msg>(view: F) -> View<Msg>
-where
-    F: Fn() -> WidgetDef<Msg> + Send + 'static,
-{
-    View(Box::new(view))
-}
-
-impl<Msg> Program for View<Msg> {
-    type Message = Msg;
-
-    fn view(&self) -> Option<WidgetDef<Self::Message>> {
-        Some(self.0())
-    }
-
-    fn update(&mut self, _msg: Self::Message) {}
-}
-
+/// Simple label Program to be used in entries.
 pub fn label<Msg>(label: impl Into<String>) -> View<Msg> {
     view({
         let label = label.into();
@@ -49,12 +33,18 @@ pub fn label<Msg>(label: impl Into<String>) -> View<Msg> {
     })
 }
 
+pub trait WithMenu: Program {
+    /// Called by Entry to open a menu.
+    fn open_menu(&self) -> Option<super::Menu<Self::Message>>;
+}
+
 enum Kind<Msg> {
-    Menu(Child<Msg>),
+    Menu(MenuChild<Msg>),
     Standard(Child<Msg>),
     Separator,
 }
 
+/// [`Menu`]'s `Entry`.
 pub struct Entry<Msg> {
     id: Option<String>,
     kind: Kind<Msg>,
@@ -63,6 +53,7 @@ pub struct Entry<Msg> {
 }
 
 impl<Msg> Entry<Msg> {
+    /// Build a new standard [`Entry`].
     pub fn standard<C>(child: C) -> Self
     where
         C: Program<Message = Msg> + Send + 'static,
@@ -75,9 +66,10 @@ impl<Msg> Entry<Msg> {
         }
     }
 
+    /// Build a new Menu [`Entry`].
     pub fn menu<C>(child: C) -> Self
     where
-        C: Program<Message = Msg> + Send + 'static,
+        C: WithMenu<Message = Msg> + Send + 'static,
     {
         Self {
             id: None,
@@ -87,6 +79,7 @@ impl<Msg> Entry<Msg> {
         }
     }
 
+    /// Build a new separator [`Entry`].
     pub fn separator() -> Self {
         Self {
             id: None,
@@ -96,6 +89,7 @@ impl<Msg> Entry<Msg> {
         }
     }
 
+    /// Sets the entry id.
     pub fn id(self, id: impl Into<String>) -> Self {
         Self {
             id: Some(id.into()),
@@ -103,6 +97,7 @@ impl<Msg> Entry<Msg> {
         }
     }
 
+    /// Disable the entry.
     pub fn disable(self) -> Self {
         Self {
             disabled: true,
@@ -110,6 +105,7 @@ impl<Msg> Entry<Msg> {
         }
     }
 
+    /// Set the close_on_submit flag.
     pub fn close_on_submit(self, close_on_submit: bool) -> Self {
         Self {
             close_on_submit,
@@ -117,40 +113,32 @@ impl<Msg> Entry<Msg> {
         }
     }
 
+    /// Check whether the [`Entry`] is disabled.
     pub fn is_disabled(&self) -> bool {
         matches!(self.kind, Kind::Separator) || self.disabled
     }
 
+    /// Check whether the [`Entry`] is a standard [`Entry`].
     pub fn is_standard(&self) -> bool {
         matches!(self.kind, Kind::Standard(_))
     }
 
+    /// Check whether the [`Entry`] is a menu [`Entry`].
     pub fn is_menu(&self) -> bool {
         matches!(self.kind, Kind::Menu(_))
     }
 
+    /// Check whether the [`Entry`] is a separator.
     pub fn is_separator(&self) -> bool {
         matches!(self.kind, Kind::Separator)
     }
 
+    /// Check whether the [`Entry`] must close after it's submitted.
     pub fn should_close_on_submit(&self) -> bool {
         self.is_standard() && self.close_on_submit
     }
 
-    fn child(&self) -> Option<&Child<Msg>> {
-        match &self.kind {
-            Kind::Standard(c) | Kind::Menu(c) => Some(c),
-            _ => None,
-        }
-    }
-
-    fn child_mut(&mut self) -> Option<&mut Child<Msg>> {
-        match &mut self.kind {
-            Kind::Standard(c) | Kind::Menu(c) => Some(c),
-            Kind::Separator => None,
-        }
-    }
-
+    /// Render a separator
     pub(super) fn separator_view(style: &super::style::Separator) -> WidgetDef<Msg> {
         let separator = Container::new(Column::new())
             .width(Length::Fill)
@@ -170,6 +158,7 @@ impl<Msg> Entry<Msg> {
         container.into()
     }
 
+    /// Render the menu-indicator icon.
     pub(super) fn menu_indicator_view(
         style: &super::style::MenuIndicator,
         disabled: bool,
@@ -191,6 +180,21 @@ impl<Msg> Entry<Msg> {
 
         icon.into()
     }
+
+    pub(super) fn open_menu(&self) -> Option<super::Menu<Msg>> {
+        match &self.kind {
+            Kind::Menu(m) => m.open_menu(),
+            _ => None,
+        }
+    }
+
+    fn update_child(&mut self, msg: Msg) {
+        match &mut self.kind {
+            Kind::Menu(m) => m.update(msg),
+            Kind::Standard(s) => s.update(msg),
+            Kind::Separator => (),
+        }
+    }
 }
 
 impl<Msg> Program for Entry<Msg>
@@ -200,55 +204,63 @@ where
     type Message = Msg;
 
     fn view(&self) -> Option<snowcap_api::widget::WidgetDef<Self::Message>> {
-        self.child().and_then(|c| c.view())
+        match &self.kind {
+            Kind::Menu(m) => m.view(),
+            Kind::Standard(s) => s.view(),
+            _ => None,
+        }
     }
 
     fn update(&mut self, msg: Self::Message) {
         use super::Message as MenuMsg;
-        let is_menu = self.is_menu();
         let is_standard = self.is_standard();
 
-        if let Some(child) = self.child_mut() {
-            let entry_msg = match msg.clone().try_into() {
-                Err(_) => {
-                    child.update(msg);
-                    return;
-                }
-                Ok(MenuMsg::Menu { .. }) => {
-                    return;
-                }
-                Ok(MenuMsg::Entry(msg)) => msg,
-            };
-
-            match entry_msg {
-                Message::Submit | Message::OpenMenu if is_menu => {
-                    child.update(super::Message::Entry(Message::OpenMenu).into());
-                }
-                Message::Submit if is_standard => {
-                    child.update(msg);
-                }
-                Message::Hover => {
-                    child.update(msg);
-                }
-                Message::Enable(id) if Some(id.as_str()) == self.id.as_deref() => {
-                    self.disabled = false;
-                }
-                Message::Disable(id) if Some(id.as_str()) == self.id.as_deref() => {
-                    self.disabled = false;
-                }
-                _ => (),
-            };
+        if matches!(self.kind, Kind::Separator) {
+            return;
         }
+
+        let entry_msg = match msg.clone().try_into() {
+            Err(_) => {
+                self.update_child(msg);
+                return;
+            }
+            Ok(MenuMsg::Menu { .. }) => {
+                return;
+            }
+            Ok(MenuMsg::Entry(msg)) => msg,
+        };
+
+        match entry_msg {
+            Message::Submit if is_standard => {
+                self.update_child(msg);
+            }
+            Message::Hover => {
+                self.update_child(msg);
+            }
+            Message::Enable(id) if Some(id.as_str()) == self.id.as_deref() => {
+                self.disabled = false;
+            }
+            Message::Disable(id) if Some(id.as_str()) == self.id.as_deref() => {
+                self.disabled = false;
+            }
+            _ => (),
+        };
     }
 
     fn event(&mut self, event: snowcap_api::surface::SurfaceEvent<Self::Message>) {
-        if let Some(child) = self.child_mut() {
-            child.event(event);
+        match &mut self.kind {
+            Kind::Menu(m) => m.event(event),
+            Kind::Standard(s) => s.event(event),
+            Kind::Separator => (),
         }
     }
 
     fn signaler(&self) -> Option<snowcap_api::signal::Signaler> {
-        self.child().and_then(|c| c.signaler())
+        match &self.kind {
+            Kind::Menu(m) => m.signaler(),
+            Kind::Standard(s) => s.signaler(),
+            Kind::Separator => None,
+        }
     }
 }
 
@@ -258,6 +270,7 @@ struct Standard<Msg> {
     callback: SubmitCallback,
 }
 
+/// Create a standard entry using a callback on submit.
 pub fn standard<Msg, C, F>(child: C, submit: F) -> Entry<Msg>
 where
     Msg: TryInto<super::Message> + Clone + 'static,
@@ -311,6 +324,7 @@ struct Submenu<Msg> {
     signaler: Option<Signaler>,
 }
 
+/// Create an [`Entry`] using a callback to open the menu.
 pub fn submenu<Msg, C, F>(child: C, on_open: F) -> Entry<Msg>
 where
     Msg: TryInto<super::Message> + Clone + Send + 'static,
@@ -351,18 +365,20 @@ where
     }
 
     fn update(&mut self, msg: Self::Message) {
-        if msg.clone().try_into().is_ok() {
-            let menu = (self.callback)();
-
-            self.signaler()
-                .unwrap()
-                .emit(super::signal::RequestSubmenuOpen::new(menu));
-        } else {
-            self.child.update(msg);
-        }
+        self.child.update(msg);
     }
 }
 
+impl<Msg> WithMenu for Submenu<Msg>
+where
+    Msg: TryInto<super::Message> + Clone + Send + 'static,
+{
+    fn open_menu(&self) -> Option<super::Menu<Msg>> {
+        Some((self.callback)())
+    }
+}
+
+/// Create a separator [`Entry`].
 pub fn separator<Msg>() -> Entry<Msg> {
     Entry::separator()
 }

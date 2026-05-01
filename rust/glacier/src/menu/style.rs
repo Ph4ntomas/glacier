@@ -1,3 +1,4 @@
+//! Menu's styling options
 use snowcap_api::widget::{Border, Color, Length, Padding};
 
 #[derive(Default, Clone, Debug)]

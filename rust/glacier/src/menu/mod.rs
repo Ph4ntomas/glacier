@@ -1,3 +1,46 @@
+//! Glacier's menu.
+//!
+//! The [`Menu`] class allows creating ContextMenu as Popups.
+//!
+//! # Entries
+//! Each menu is composed of several [`Entry`] object that are layout as a single column. There
+//! exists 3 kind of entries:
+//! - Standard: This are your basic element. Activating one usually triggers a single action then
+//!   close the menu.
+//! - SubMenu: Hovering or activating these will open a new [`Menu`] which will be tied to the
+//!   current one.
+//! - Separator: Use these if you want to display a lines to create section in your [`Menu`].
+//!
+//! Standard and SubMenu entries do not display anything by themselves. The internally store a
+//! [`Program`] to which they calls. Calls to [`Program::update`] are forwarded if the received
+//! message doesn't concern the [`Entry`] itself.
+//!
+//! It's up to the nested [`Program`] to handle calls to [`entry::Message::Hover`] or
+//! [`entry::Message::Submit`]. For convenience, the function [`entry::standard`] and
+//! [`entry::submenu`] takes a callback and wrap it in a suitable [`Program`].
+//!
+//! # SubMenu
+//! When a new SubMenu is open, its parent Menu will spawn a [`popup`] to host it. That popup will
+//! always be positioned relative to the [`Entry`] it's linked to. The exact positioning of the
+//! new popup can be controlled by calling [`Menu::submenu_config`] on the toplevel [`Menu`].
+//!
+//! If the toplevel [`Menu`] was opened via [`Menu::popup`] and no submenu configuration was set,
+//! submenus will inherit their parent configuration.
+//!
+//! Only one SubMenu may be opened at a time.
+//!
+//! # Interacting with the menu
+//! [`Menu`] support both mouse, keyboard interaction and programmatic interaction.
+//!
+//! When using the mouse, submenu will automatically open when they are being hovered. Standard
+//! entries requires a click to trigger their action.
+//!
+//! Keyboard interaction can be configured by calling [`Menu::set_key_config`] or
+//! [`Menu::merge_key_config`]. When this is used, submenu aren't opened automatically on hover.
+//!
+//! It's also possible to send messages to the [`Menu`] directly using the [`Handle`] object.
+//!
+//! [`Popup`]: snowcap_api::popup
 use std::{
     collections::HashSet,
     fmt::Debug,
@@ -23,25 +66,18 @@ use snowcap_api::{
 
 use crate::color;
 
+/// Menu signals.
+///
+/// These signals are used by [`Menu`]'s children ([`Entry`] or submenu) to request an action
+/// from their parent surface.
 pub mod signal {
     use snowcap_api::signal::Signal;
 
-    use super::message;
-
+    /// Request the parent [`Menu`] to close its submenu.
+    ///
+    /// [`Menu`]: super::Menu
     #[derive(Debug, Clone, Signal)]
     pub struct RequestSubmenuClose;
-
-    #[derive(Clone, Signal)]
-    pub struct RequestSubmenuOpen(pub(super) message::InFlightMenu);
-
-    impl RequestSubmenuOpen {
-        pub fn new<Msg>(menu: super::Menu<Msg>) -> Self
-        where
-            Msg: Send + 'static,
-        {
-            Self(menu.into())
-        }
-    }
 }
 
 pub mod style;
@@ -56,6 +92,11 @@ pub mod message;
 pub use message::Action;
 pub use message::Message;
 
+/// Glacier's Menu.
+///
+/// See [module-level] documentation for more informations.
+///
+/// [module-level]: self
 pub struct Menu<Msg = message::Message> {
     base: WidgetBase,
     builder: message::Builder<Msg>,
@@ -72,11 +113,13 @@ pub struct Menu<Msg = message::Message> {
     submenu: Option<Submenu<Msg>>,
 }
 
+/// Handle to drive the menu programatically.
 pub struct Handle<Msg = message::Message> {
     builder: message::Builder<Msg>,
     handle: PopupHandle<Msg>,
 }
 
+/// Internal Submenu data.
 struct Submenu<Msg> {
     handle: Handle<Msg>,
     signaler: Signaler,
@@ -84,6 +127,7 @@ struct Submenu<Msg> {
     close_signal: SigHandle<RequestClose>,
 }
 
+/// [`Menu`]'s popup configuration.
 #[derive(Default, Debug, Clone)]
 pub struct Config {
     pub anchor: Option<popup::Anchor>,
@@ -168,10 +212,12 @@ pub fn default_key_config() -> KeyConfig {
 }
 
 impl<Msg> Handle<Msg> {
+    /// Close the [`Menu`].
     pub fn close(self) {
         self.handle.close();
     }
 
+    /// Send a message to the [`Menu`], its open submenu, or any [`Entry`] they hold.
     pub fn send_message(&self, message: Msg) {
         self.handle.send_message(message);
     }
@@ -181,16 +227,19 @@ impl<Msg> Handle<Msg>
 where
     Msg: From<Message>,
 {
+    /// Focus the next entry.
     pub fn next(&self) {
         let message = self.builder.menu(Action::Next);
         self.handle.send_message(message);
     }
 
+    /// Focus the previous entry.
     pub fn prev(&self) {
         let message = self.builder.menu(Action::Prev);
         self.handle.send_message(message);
     }
 
+    /// Submit the currently focussed entry.
     pub fn submit(&self) {
         let message = self.builder.menu(Action::Submit);
         self.handle.send_message(message);
@@ -198,10 +247,14 @@ where
 }
 
 impl Config {
+    /// Create a new default config.
     pub fn new() -> Self {
         Default::default()
     }
 
+    /// Sets the popup´s [`Anchor`].
+    ///
+    /// [`Anchor`]: popup::Anchor
     pub fn anchor(self, anchor: popup::Anchor) -> Self {
         Self {
             anchor: Some(anchor),
@@ -209,6 +262,9 @@ impl Config {
         }
     }
 
+    /// Sets the popup's [`Gravity`].
+    ///
+    /// [`Gravity`]: popup::Gravity
     pub fn gravity(self, gravity: popup::Gravity) -> Self {
         Self {
             gravity: Some(gravity),
@@ -216,6 +272,9 @@ impl Config {
         }
     }
 
+    /// Sets the popup's [`Offset`].
+    ///
+    /// [`Offset`]: popup::Offset
     pub fn offset(self, offset: popup::Offset) -> Self {
         Self {
             offset: Some(offset),
@@ -223,6 +282,9 @@ impl Config {
         }
     }
 
+    /// Sets the popup's [`ConstraintsAdjust`]
+    ///
+    /// [`ConstraintsAdjust`]: popup::ConstraintsAdjust
     pub fn constraint_adjustment(self, adjustment: popup::ConstraintsAdjust) -> Self {
         Self {
             constraints_adjust: Some(adjustment),
@@ -273,6 +335,7 @@ impl<Msg> Menu<Msg>
 where
     Msg: From<Message> + Clone + 'static,
 {
+    /// Keyboad handler registered to the surface by default.
     pub fn default_keyboard_handler(
         key_event: KeyEvent,
         key_config: &KeyConfig,
@@ -327,6 +390,7 @@ where
 {
     const PROGRAM_NAME: &'static str = "glacier::Menu";
 
+    /// Create a new [`Menu`]
     pub fn new() -> Self {
         let base = WidgetBase::new(Self::PROGRAM_NAME);
         let builder = message::Builder::new(base.id());
@@ -348,6 +412,7 @@ where
         }
     }
 
+    /// Connect to the Menu's signals.
     pub fn connect<S, F>(&self, callback: F) -> snowcap_api::signal::Handle<S>
     where
         S: snowcap_api::signal::Signal,
@@ -417,6 +482,7 @@ where
 }
 
 impl<Msg> Menu<Msg> {
+    /// Add a new [`Entry`] to the [`Menu`].
     pub fn add_entry(self, entry: Entry<Msg>) -> Self {
         let mut entries = self.entries;
 
@@ -425,6 +491,7 @@ impl<Msg> Menu<Msg> {
         Self { entries, ..self }
     }
 
+    /// Add a new Separator to the [`Menu`].
     pub fn add_separator(self) -> Self {
         let mut entries = self.entries;
 
@@ -433,6 +500,7 @@ impl<Msg> Menu<Msg> {
         Self { entries, ..self }
     }
 
+    /// Sets the whole [`Entry`] list.
     pub fn entries(self, entries: impl IntoIterator<Item = Entry<Msg>>) -> Self {
         Self {
             entries: entries.into_iter().collect(),
@@ -440,6 +508,7 @@ impl<Msg> Menu<Msg> {
         }
     }
 
+    /// Sets the [`Config`] to use when spawning submenus.
     pub fn submenu_config(self, config: Config) -> Self {
         Self {
             submenu_config: Some(config),
@@ -447,14 +516,17 @@ impl<Msg> Menu<Msg> {
         }
     }
 
+    /// Access the current [`KeyConfig`]
     pub fn key_config(&self) -> &KeyConfig {
         &self.key_config
     }
 
+    /// Sets the [`Menu`]'s [`KeyConfig`]
     pub fn set_key_config(self, key_config: KeyConfig) -> Self {
         Self { key_config, ..self }
     }
 
+    /// Merge the active [`KeyConfig`] with the one passed as a parameter.
     pub fn merge_key_config(self, key_config: KeyConfig) -> Self {
         let KeyConfig {
             next,
@@ -681,6 +753,11 @@ where
             return false;
         }
 
+        if entry.is_menu() {
+            self.open_entry();
+            return false;
+        }
+
         entry.update(Message::Entry(entry::Message::Submit).into());
 
         entry.should_close_on_submit()
@@ -695,7 +772,11 @@ where
             return;
         }
 
-        entry.update(Message::Entry(entry::Message::OpenMenu).into());
+        let Some(submenu) = entry.open_menu() else {
+            return;
+        };
+
+        self.open_submenu(submenu);
     }
 
     fn open_submenu(&mut self, submenu: Menu<Msg>) {
@@ -717,10 +798,7 @@ where
 
         self.close_menu();
 
-        let config = self
-            .submenu_config
-            .clone()
-            .expect("Missing submenu config.");
+        let config = self.submenu_config.clone().unwrap_or_default();
         let position = popup::Position::at_widget(self.make_entry_id(id));
 
         let sub_close_signal = submenu.connect({
@@ -760,36 +838,17 @@ where
             });
     }
 
-    pub fn register_entry(&mut self, entry: &Entry<Msg>) {
-        self.register_child(entry);
-
-        if entry.is_menu()
-            && let Some(signaler) = entry.signaler()
-        {
-            signaler.connect({
-                let builder = self.builder.clone();
-                let signaler = self.base.signaler();
-                move |signal::RequestSubmenuOpen(menu)| {
-                    let message = builder.menu(Action::OpenSubmenu(menu));
-
-                    signaler.emit(snowcap_api::widget::signal::Message(message));
-                    snowcap_api::signal::HandlerPolicy::Keep
-                }
-            });
-        }
-    }
-
-    pub fn refresh_entries(&mut self, mut entries: Vec<Entry<Msg>>) {
+    fn refresh_entries(&mut self, mut entries: Vec<Entry<Msg>>) {
         self.entries.drain(..).for_each(|mut e| {
             e.event(SurfaceEvent::Closing);
         });
 
         if let Some(surface) = self.handle.clone() {
             entries.iter_mut().for_each(|e| {
+                self.register_child(e);
                 e.event(SurfaceEvent::Created {
                     surface: surface.clone(),
                 });
-                self.register_entry(e);
             });
         }
 
@@ -906,11 +965,6 @@ where
             }
             Action::OpenMenu => {
                 self.open_entry();
-            }
-            Action::OpenSubmenu(in_flight) => {
-                if let Some(menu) = in_flight.take() {
-                    self.open_submenu(menu);
-                }
             }
             Action::CloseSubmenu => self.close_menu(),
             Action::Close => {
