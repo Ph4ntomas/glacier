@@ -272,14 +272,7 @@ impl Update {
         let handle = if let Some(path) = path {
             Some(image::Handle::Path(path.into()))
         } else if let Ok(pixmaps) = proxy.icon_pixmap().await {
-            pixmaps
-                .into_iter()
-                .next()
-                .map(|pixmap| image::Handle::Rgba {
-                    width: pixmap.width as u32,
-                    height: pixmap.height as u32,
-                    bytes: pixmap.bytes,
-                })
+            pixmaps.into_iter().next().map(image::Handle::from)
         } else {
             None
         };
@@ -307,14 +300,7 @@ impl Update {
         let handle = if let Some(path) = path {
             Some(image::Handle::Path(path.into()))
         } else if let Ok(pixmaps) = proxy.attention_icon_pixmap().await {
-            pixmaps
-                .into_iter()
-                .next()
-                .map(|pixmap| image::Handle::Rgba {
-                    width: pixmap.width as u32,
-                    height: pixmap.height as u32,
-                    bytes: pixmap.bytes,
-                })
+            pixmaps.into_iter().next().map(image::Handle::from)
         } else {
             None
         };
@@ -343,14 +329,7 @@ impl Update {
         let handle = if let Some(path) = path {
             Some(image::Handle::Path(path.into()))
         } else if let Ok(pixmaps) = proxy.overlay_icon_pixmap().await {
-            pixmaps
-                .into_iter()
-                .next()
-                .map(|pixmap| image::Handle::Rgba {
-                    width: pixmap.width as u32,
-                    height: pixmap.height as u32,
-                    bytes: pixmap.bytes,
-                })
+            pixmaps.into_iter().next().map(image::Handle::from)
         } else {
             None
         };

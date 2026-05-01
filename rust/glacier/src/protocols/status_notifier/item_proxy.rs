@@ -131,3 +131,30 @@ pub trait Item {
     #[zbus(property)]
     fn window_id(&self) -> zbus::Result<i32>;
 }
+
+impl From<Pixmap> for snowcap_api::widget::image::Handle {
+    fn from(value: Pixmap) -> Self {
+        let Pixmap {
+            width,
+            height,
+            mut bytes,
+        } = value;
+
+        let (chunks, _rem) = bytes.as_chunks_mut::<4>();
+
+        for chunk in chunks {
+            let (a, r, g, b) = (chunk[0], chunk[1], chunk[2], chunk[3]);
+
+            chunk[0] = r;
+            chunk[1] = g;
+            chunk[2] = b;
+            chunk[3] = a;
+        }
+
+        snowcap_api::widget::image::Handle::Rgba {
+            width: width as u32,
+            height: height as u32,
+            bytes,
+        }
+    }
+}
