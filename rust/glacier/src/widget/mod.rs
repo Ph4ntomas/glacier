@@ -30,6 +30,8 @@ pub mod systray;
 pub mod taglist;
 pub mod textbox;
 
+pub mod utils;
+
 #[doc(inline)]
 pub use clock::{LocalSimpleClock, SimpleClock, UtcSimpleClock};
 #[doc(inline)]
